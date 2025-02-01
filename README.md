@@ -63,7 +63,7 @@ This project is released under the MIT License.The included texts from Project G
 
 MIT License
 
-Copyright (c) 2024 Jennifer Klaman
+Copyright (c) 2024 Jennifer K Laman
 
 This project includes **public domain texts** sourced from Project Gutenberg.
 The texts included in this repository are **not copyrighted** and are freely available under the terms of the **Project Gutenberg License**.
@@ -92,5 +92,5 @@ Web version using Flask or Streamlit.
 
 📩 Contact
 
-📧 Jennifer Klaman - [Your Email Here]🔗 GitHub: JenniferKlaman
+📧 Jennifer K Laman - [jenniferklaman@gmail.com]🔗 GitHub: jenniferklaman
 
