@@ -1,33 +1,96 @@
-# MarkovsMuse
-Markov Chain Text Generator
-This repository contains a Python implementation of a Markov chain text generator, which uses a combination of transition matrix probabilities and the Monte Carlo approach to generate realistic and diverse text.
+🌿 Markov's Muse: AI-Powered Poem Generator
 
-Overview
-The Markov chain text generator is a statistical model that analyzes a given corpus of text and generates new text based on the patterns and structures it identifies. This implementation uses a transition matrix to store the word-to-word probabilities, and incorporates the Monte Carlo approach to introduce an element of randomness into the text generation process.
+Welcome to Markov's Muse, a poetry generator that uses Markov Chains to create new poems inspired by the works of famous poets! This project lets users generate poems based on the styles of Emily Dickinson, Robert Frost, William Shakespeare, and Edgar Allan Poe.
 
-Features
-Analyzes a given corpus of text to build a transition matrix of word-to-word probabilities
-Uses the Monte Carlo approach to generate text based on the transition matrix probabilities
-Allows for customizable starting words and text lengths
-Generates realistic and diverse text that balances predictability and randomness
-Usage
-To use the Markov chain text generator, simply clone this repository and replace the corpus variable in the code with the path to your own text file. You can then call the generate_text function with a starting word and desired text length to generate new text.
+📌 Features
 
-For example:
+🎭 Generate a poem based on a selected poet's style.
 
+🔀 Uses Markov Chains to model word sequences.
 
-Verify
+✍️ Customizable number of lines (up to 50).
 
-Open In Editor
-Edit
-Copy code
-print(generate_text("once", 20))
-This would generate 20 words of text starting with the word "once".
+🎨 Modern, sleek dark mode UI built with Tkinter.
 
-License
-This repository is licensed under the MIT License. See the LICENSE file for details.
+👥 Installation & Usage
 
-Acknowledgments
-This implementation was inspired by various online resources and tutorials on Markov chain text generation. If you have any questions or suggestions, feel free to open an issue or pull request!
+1⃣ Clone the Repository
 
-I hope this helps
+git clone https://github.com/jenniferklaman/MarkovsMuse.git
+cd MarkovsMuse
+
+2⃣ Install Dependencies
+
+This project runs on Python 3.x. Install required libraries:
+
+pip install tk
+
+3⃣ Run the Poem Generator
+
+python markovsmuse.py
+
+🌟 Source Attribution
+
+This project sources text files from Project Gutenberg (https://www.gutenberg.org), which provides free access to public domain books.
+
+📚 Included Works & Sources
+
+Poet
+
+Source Link
+
+Emily Dickinson
+
+Project Gutenberg
+
+Robert Frost
+
+Project Gutenberg
+
+William Shakespeare
+
+Project Gutenberg
+
+Edgar Allan Poe
+
+Project Gutenberg
+
+Project Gutenberg Disclaimer:This project follows Project Gutenberg's Terms of Use by ensuring that all sourced texts are in the public domain. If you use or redistribute these texts, you must not charge money for them, and you should always attribute Project Gutenberg as the original source.For more details, visit the Project Gutenberg License.
+
+⚖️ License
+
+This project is released under the MIT License.The included texts from Project Gutenberg are in the public domain.
+
+MIT License
+
+Copyright (c) 2024 Jennifer Klaman
+
+This project includes **public domain texts** sourced from Project Gutenberg.
+The texts included in this repository are **not copyrighted** and are freely available under the terms of the **Project Gutenberg License**.
+
+For more details, see: https://www.gutenberg.org/policy/license.html
+
+🌟 Contributing
+
+Want to improve Markov's Muse? Contributions are welcome!
+
+Fork the repo
+
+Create a new branch (git checkout -b feature-name)
+
+Commit your changes (git commit -m "Added feature X")
+
+Push and create a pull request 🎉
+
+🎭 Future Plans
+
+More poets! Add Sylvia Plath, Langston Hughes, etc.
+
+Better sentence structure! Improve Markov modeling.
+
+Web version using Flask or Streamlit.
+
+📩 Contact
+
+📧 Jennifer Klaman - [Your Email Here]🔗 GitHub: JenniferKlaman
+
