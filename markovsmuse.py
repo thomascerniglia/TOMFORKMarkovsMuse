@@ -13,7 +13,6 @@ poet_files = {
 }
 
 poetic_devices = [
-    "None",
     "Alliteration",
     "Repetition",
     "Rhyme",
@@ -21,26 +20,28 @@ poetic_devices = [
 ]
 
 # Function to preprocess the text and build the Markov chain
-def preprocess_text(file_path):
+def preprocess_text(file_path, depth=2):
     with open(file_path, 'r', encoding='utf-8') as f:
         text = f.read()
     
-    words = re.split(r'\W+', text.lower())
-    stop_words = set(["a", "an", "the", "and", "or", "but", "is", "in", "on", "at", "by", "with"])
+    words = re.findall(r'\b\w+\b', text.lower())
+    stop_words = {"a", "an", "the", "and", "or", "but", "is", "in", "on", "at", "by", "with"}
     words = [word for word in words if word not in stop_words]
 
-    transition_matrix = defaultdict(dict)
-    for i in range(len(words) - 1):
-        word, next_word = words[i], words[i + 1]
-        transition_matrix[word][next_word] = transition_matrix[word].get(next_word, 0) + 1
+    transition_matrix = defaultdict(lambda: defaultdict(int))
+
+    for i in range(len(words) - depth):
+        key = tuple(words[i:i + depth])
+        next_word = words[i + depth]
+        transition_matrix[key][next_word] += 1
 
     return transition_matrix
 
-# Function to apply poetic devices
-def apply_poetic_device(poem, device):
+# Function to apply multiple poetic devices
+def apply_poetic_devices(poem, devices):
     lines = poem.split("\n")
 
-    if device == "Alliteration":
+    if "Alliteration" in devices:
         for i in range(len(lines)):
             words = lines[i].split()
             if words:
@@ -48,28 +49,30 @@ def apply_poetic_device(poem, device):
                 words = [w for w in words if w.startswith(first_letter)]
                 lines[i] = " ".join(words) if words else lines[i]
 
-    elif device == "Repetition":
-        if lines:
-            repeated_phrase = lines[0].split()[:3]  # First 3 words of the first line
-            if repeated_phrase:
-                for i in range(1, len(lines), 2):
-                    lines[i] = lines[i] + " " + " ".join(repeated_phrase)
+    if "Repetition" in devices and len(lines) > 2:
+        repeated_phrase = lines[0].split()[:3]  # First 3 words of first line
+        if repeated_phrase:
+            for i in range(1, len(lines), 2):
+                lines[i] = lines[i] + " " + " ".join(repeated_phrase)
 
-    elif device == "Rhyme":
+    if "Rhyme" in devices:
         for i in range(len(lines) - 1):
             words = lines[i].split()
             if words:
                 last_word = words[-1]
                 lines[i] = f"{' '.join(words)} ({last_word})"
 
-    elif device == "Metaphor":
+    if "Metaphor" in devices:
         metaphor_dict = {
             "moon": "a silver lantern",
             "sun": "a golden eye",
             "river": "a winding ribbon",
             "tree": "a silent guardian",
             "sky": "a vast ocean",
-            "wind": "a whispering voice"
+            "wind": "a whispering voice",
+            "stars": "celestial diamonds",
+            "clouds": "wandering dreamers",
+            "night": "a velvet shroud"
         }
         for i in range(len(lines)):
             for key, value in metaphor_dict.items():
@@ -77,46 +80,44 @@ def apply_poetic_device(poem, device):
 
     return "\n".join(lines)
 
-# Function to generate a poem
-def generate_poem(start_word, num_lines, transition_matrix, poetic_device):
+# Function to generate a complex poem
+def generate_poem(start_word, num_lines, transition_matrix, devices, depth=2):
     poem = []
     
     for _ in range(num_lines):
-        line = [start_word]
-        for _ in range(random.randint(4, 10)):  # Random words per line
-            word = line[-1]
-            next_words = list(transition_matrix[word].keys())
+        line = list(start_word)
+        for _ in range(random.randint(5, 12)):  # More varied word count per line
+            key = tuple(line[-depth:])
+            next_words = list(transition_matrix[key].keys())
             if not next_words:
-                break  # Stop if there are no next words
-            next_word = random.choices(next_words, 
-                                       weights=[transition_matrix[word][nw] for nw in next_words])[0]
+                break  
+            next_word = random.choices(next_words, weights=[transition_matrix[key][nw] for nw in next_words])[0]
             line.append(next_word)
         poem.append(' '.join(line).capitalize())
 
-        # Choose a new random starting word for variety
+        # Choose a new starting phrase for variety
         start_word = random.choice(list(transition_matrix.keys()))
 
-    # Apply poetic device
-    return apply_poetic_device("\n".join(poem), poetic_device)
+    return apply_poetic_devices("\n".join(poem), devices)
 
 # Function to handle poem generation in the UI
 def on_generate():
     selected_poet = poet_var.get()
     num_lines = int(lines_var.get())
-    selected_device = device_var.get()
+    selected_devices = [device for device, var in device_vars.items() if var.get()]
 
     if selected_poet and num_lines > 0:
         file_path = poet_files[selected_poet]
         transition_matrix = preprocess_text(file_path)
         start_word = random.choice(list(transition_matrix.keys()))
-        poem = generate_poem(start_word, num_lines, transition_matrix, selected_device)
+        poem = generate_poem(start_word, num_lines, transition_matrix, selected_devices)
         text_output.delete("1.0", tk.END)
         text_output.insert(tk.INSERT, poem)
 
 # GUI Setup
 root = tk.Tk()
 root.title("🌸 Poem Generator 🌸")
-root.geometry("600x550")
+root.geometry("650x600")
 root.configure(bg="#FFF5E1")  # Soft pastel background
 
 # Custom fonts & styles
@@ -146,14 +147,17 @@ lines_entry = ttk.Spinbox(lines_frame, from_=1, to=50, textvariable=lines_var, w
 lines_entry.pack(side=tk.LEFT, padx=5)
 lines_entry.set(10)  # Default to 10 lines
 
-# Poetic Device selection
+# Poetic Device selection (Checkboxes for multi-selection)
 device_frame = tk.Frame(root, bg="#FFF5E1")
 device_frame.pack(pady=5)
-ttk.Label(device_frame, text="🎭 Poetic Device:", font=label_font, background="#FFF5E1").pack(side=tk.LEFT, padx=5)
-device_var = tk.StringVar()
-device_dropdown = ttk.Combobox(device_frame, textvariable=device_var, values=poetic_devices, font=label_font)
-device_dropdown.pack(side=tk.LEFT, padx=5)
-device_dropdown.current(0)
+ttk.Label(device_frame, text="🎭 Poetic Devices:", font=label_font, background="#FFF5E1").pack()
+
+device_vars = {}
+for device in poetic_devices:
+    var = tk.BooleanVar()
+    chk = tk.Checkbutton(device_frame, text=device, variable=var, font=label_font, bg="#FFF5E1", anchor="w")
+    chk.pack(anchor="w", padx=10)
+    device_vars[device] = var
 
 # Generate button with cute colors
 generate_button = tk.Button(root, text="✨ Generate Poem ✨", command=on_generate, font=button_font,
