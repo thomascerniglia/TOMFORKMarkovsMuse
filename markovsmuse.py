@@ -12,6 +12,14 @@ poet_files = {
     "Edgar Allan Poe": "poe.txt",
 }
 
+poetic_devices = [
+    "None",
+    "Alliteration",
+    "Repetition",
+    "Rhyme",
+    "Metaphor"
+]
+
 # Function to preprocess the text and build the Markov chain
 def preprocess_text(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -28,8 +36,49 @@ def preprocess_text(file_path):
 
     return transition_matrix
 
+# Function to apply poetic devices
+def apply_poetic_device(poem, device):
+    lines = poem.split("\n")
+
+    if device == "Alliteration":
+        for i in range(len(lines)):
+            words = lines[i].split()
+            if words:
+                first_letter = words[0][0] if words[0] else ''
+                words = [w for w in words if w.startswith(first_letter)]
+                lines[i] = " ".join(words) if words else lines[i]
+
+    elif device == "Repetition":
+        if lines:
+            repeated_phrase = lines[0].split()[:3]  # First 3 words of the first line
+            if repeated_phrase:
+                for i in range(1, len(lines), 2):
+                    lines[i] = lines[i] + " " + " ".join(repeated_phrase)
+
+    elif device == "Rhyme":
+        for i in range(len(lines) - 1):
+            words = lines[i].split()
+            if words:
+                last_word = words[-1]
+                lines[i] = f"{' '.join(words)} ({last_word})"
+
+    elif device == "Metaphor":
+        metaphor_dict = {
+            "moon": "a silver lantern",
+            "sun": "a golden eye",
+            "river": "a winding ribbon",
+            "tree": "a silent guardian",
+            "sky": "a vast ocean",
+            "wind": "a whispering voice"
+        }
+        for i in range(len(lines)):
+            for key, value in metaphor_dict.items():
+                lines[i] = lines[i].replace(key, value)
+
+    return "\n".join(lines)
+
 # Function to generate a poem
-def generate_poem(start_word, num_lines, transition_matrix):
+def generate_poem(start_word, num_lines, transition_matrix, poetic_device):
     poem = []
     
     for _ in range(num_lines):
@@ -47,25 +96,27 @@ def generate_poem(start_word, num_lines, transition_matrix):
         # Choose a new random starting word for variety
         start_word = random.choice(list(transition_matrix.keys()))
 
-    return '\n'.join(poem)
+    # Apply poetic device
+    return apply_poetic_device("\n".join(poem), poetic_device)
 
 # Function to handle poem generation in the UI
 def on_generate():
     selected_poet = poet_var.get()
     num_lines = int(lines_var.get())
+    selected_device = device_var.get()
 
     if selected_poet and num_lines > 0:
         file_path = poet_files[selected_poet]
         transition_matrix = preprocess_text(file_path)
         start_word = random.choice(list(transition_matrix.keys()))
-        poem = generate_poem(start_word, num_lines, transition_matrix)
+        poem = generate_poem(start_word, num_lines, transition_matrix, selected_device)
         text_output.delete("1.0", tk.END)
         text_output.insert(tk.INSERT, poem)
 
 # GUI Setup
 root = tk.Tk()
 root.title("🌸 Poem Generator 🌸")
-root.geometry("550x500")
+root.geometry("600x550")
 root.configure(bg="#FFF5E1")  # Soft pastel background
 
 # Custom fonts & styles
@@ -94,6 +145,15 @@ lines_var = tk.StringVar()
 lines_entry = ttk.Spinbox(lines_frame, from_=1, to=50, textvariable=lines_var, width=5, font=label_font)
 lines_entry.pack(side=tk.LEFT, padx=5)
 lines_entry.set(10)  # Default to 10 lines
+
+# Poetic Device selection
+device_frame = tk.Frame(root, bg="#FFF5E1")
+device_frame.pack(pady=5)
+ttk.Label(device_frame, text="🎭 Poetic Device:", font=label_font, background="#FFF5E1").pack(side=tk.LEFT, padx=5)
+device_var = tk.StringVar()
+device_dropdown = ttk.Combobox(device_frame, textvariable=device_var, values=poetic_devices, font=label_font)
+device_dropdown.pack(side=tk.LEFT, padx=5)
+device_dropdown.current(0)
 
 # Generate button with cute colors
 generate_button = tk.Button(root, text="✨ Generate Poem ✨", command=on_generate, font=button_font,
