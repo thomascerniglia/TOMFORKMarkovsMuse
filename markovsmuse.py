@@ -1,7 +1,7 @@
 import random
 import re
 import tkinter as tk
-from tkinter import ttk, scrolledtext
+from tkinter import ttk, scrolledtext, Menu
 from collections import defaultdict
 
 # Step 1: Data Collection - Dictionary containing available poets and their respective text files
@@ -15,9 +15,16 @@ poet_files = {
 # List of available poetic devices that the user can apply to the poem
 poetic_devices = [
     "Alliteration",
-    "Repetition",
-    "Rhyme",
+    "Repetition", 
+    "Rhyme",  # This will become a parent option
     "Metaphor"
+]
+
+# Add rhyme scheme options
+rhyme_schemes = [
+    "AABB (Paired)",
+    "ABAB (Alternating)",
+    "ABBA (Enclosed)"
 ]
 
 # Function to preprocess the text and build the Markov chain
@@ -30,8 +37,18 @@ def preprocess_text(file_path, depth=2):
     :param depth: Number of words to use as context for the Markov model (bigram or trigram)
     :return: A dictionary representing the transition probabilities for the Markov chain
     """
-    with open(file_path, 'r', encoding='utf-8') as f:
-        text = f.read()
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+            if not text:
+                print(f"Warning: {file_path} is empty")
+                return defaultdict(lambda: defaultdict(int))
+    except FileNotFoundError:
+        print(f"Error: Could not find file {file_path}")
+        return defaultdict(lambda: defaultdict(int))
+    except Exception as e:
+        print(f"Error reading {file_path}: {e}")
+        return defaultdict(lambda: defaultdict(int))
 
     # Remove Roman numerals (common in classic poetry collections)
     text = re.sub(r'\b[IVXLCDM]+\b', '', text)
@@ -56,6 +73,101 @@ def preprocess_text(file_path, depth=2):
 
     return transition_matrix
 
+def get_rhyme_pattern(word):
+    """Get the rhyming pattern of a word's ending"""
+    word = word.lower().strip('.,!?;:')
+    if len(word) < 3:
+        return None
+        
+    vowels = 'aeiou'
+    consonants = 'bcdfghjklmnpqrstvwxyz'
+    
+    # Find last stressed syllable
+    last_vowel_pos = -1
+    vowel_count = 0
+    for i in range(len(word) - 1, -1, -1):
+        if word[i] in vowels:
+            if vowel_count == 0:
+                last_vowel_pos = i
+            vowel_count += 1
+            # Include consecutive vowels
+            while i > 0 and word[i - 1] in vowels:
+                i -= 1
+                
+    if last_vowel_pos == -1:
+        return None
+        
+    # Get the rhyming part (from last stressed syllable to end)
+    rhyme_part = word[max(0, last_vowel_pos - 1):]
+    
+    # Handle special cases
+    if rhyme_part.endswith('e') and len(rhyme_part) > 2:  # Silent e
+        rhyme_part = rhyme_part[:-1]
+    
+    # Get vowel and consonant patterns separately
+    vowel_pattern = ''.join(c for c in rhyme_part if c in vowels)
+    consonant_pattern = ''.join(c for c in rhyme_part if c in consonants)
+    
+    return (vowel_pattern, consonant_pattern) if vowel_pattern else None
+
+def find_rhyming_pairs(lines):
+    """
+    Find pairs of lines that could rhyme based on their last words.
+    Uses strict AABB rhyming pattern with precise sound matching.
+    """
+    pairs = []
+    common_words = {
+        'the', 'and', 'but', 'or', 'if', 'of', 'to', 'in', 'on', 'at', 'a', 'an', 'for', 'with',
+        'is', 'was', 'were', 'be', 'been', 'has', 'have', 'had', 'do', 'does', 'did', 'will',
+        'would', 'should', 'could', 'may', 'might', 'must', 'shall', 'can', 'us', 'me', 'we',
+        'they', 'them', 'him', 'her', 'his', 'their', 'our', 'your', 'my', 'so', 'go', 'no',
+        'here', 'there', 'where', 'when', 'then', 'than', 'this', 'that', 'these', 'those',
+        'through', 'though', 'although', 'yet', 'still', 'just', 'now', 'how', 'who', 'what'
+    }
+    
+    # Process lines in pairs for AABB pattern
+    for i in range(0, len(lines)-1, 2):
+        if i + 1 >= len(lines):
+            break
+            
+        words1 = lines[i].split()
+        words2 = lines[i+1].split()
+        
+        if not words1 or not words2:
+            continue
+            
+        last_word1 = words1[-1]
+        last_word2 = words2[-1]
+        
+        # Skip common words, short words, and identical words
+        if (last_word1.lower() in common_words or 
+            last_word2.lower() in common_words or
+            len(last_word1) < 3 or len(last_word2) < 3 or
+            last_word1.lower() == last_word2.lower()):
+            continue
+            
+        pattern1 = get_rhyme_pattern(last_word1)
+        pattern2 = get_rhyme_pattern(last_word2)
+        
+        if pattern1 and pattern2:
+            vowels1, cons1 = pattern1
+            vowels2, cons2 = pattern2
+            
+            # Perfect rhyme: same vowel and consonant patterns
+            if vowels1 == vowels2 and cons1 == cons2:
+                pairs.append((i, i+1, 4))
+            # Strong rhyme: same vowel pattern, similar consonants
+            elif vowels1 == vowels2 and len(set(cons1) & set(cons2)) >= max(1, len(cons1) // 2):
+                pairs.append((i, i+1, 3))
+            # Assonance: same vowel pattern
+            elif vowels1 == vowels2 and len(vowels1) >= 2:
+                pairs.append((i, i+1, 2))
+            # Weak rhyme: similar ending sound
+            elif vowels1[-1:] == vowels2[-1:] and cons1[-1:] == cons2[-1:]:
+                pairs.append((i, i+1, 1))
+    
+    return pairs
+
 # Function to apply multiple poetic devices to the generated poem
 def apply_poetic_devices(poem, devices):
     """
@@ -68,13 +180,73 @@ def apply_poetic_devices(poem, devices):
     lines = poem.split("\n")
 
     if "Alliteration" in devices:
-        # Retains words in each line that start with the same letter as the first word
-        for i in range(len(lines)):
-            words = lines[i].split()
-            if words:
-                first_letter = words[0][0] if words[0] else ''
-                words = [w for w in words if w.startswith(first_letter)]
-                lines[i] = " ".join(words) if words else lines[i]
+        # Enhanced alliteration that actually creates alliterative patterns
+        new_lines = []
+        consonant_clusters = {
+            'ch': [], 'sh': [], 'th': [], 'wh': [], 'ph': [],
+            'b': [], 'c': [], 'd': [], 'f': [], 'g': [], 'h': [], 
+            'j': [], 'k': [], 'l': [], 'm': [], 'n': [], 'p': [], 
+            'q': [], 'r': [], 's': [], 't': [], 'v': [], 'w': [], 
+            'x': [], 'y': [], 'z': []
+        }
+        
+        for line in lines:
+            words = [w for w in line.split() if len(w) >= 2]  # Only consider words of 2+ characters
+            if not words:
+                new_lines.append(line)
+                continue
+            
+            # Categorize words by their starting sounds
+            for word in words:
+                word_lower = word.lower()
+                # Skip single letters or very short fragments
+                if len(word_lower) < 2:
+                    continue
+                    
+                # Check for consonant clusters first
+                first_two = word_lower[:2]
+                if first_two in consonant_clusters and len(word) >= 3:  # Ensure word is long enough
+                    consonant_clusters[first_two].append(word)
+                    continue
+                
+                # Check for single consonants
+                if word_lower[0] in consonant_clusters and len(word) >= 3:  # Ensure word is long enough
+                    consonant_clusters[word_lower[0]].append(word)
+            
+            # Try to create alliteration
+            most_common_sound = None
+            max_words = 1  # Start at 1 to ensure we have enough words
+            
+            for sound, word_list in consonant_clusters.items():
+                # Only consider sounds that have enough valid words
+                if len(word_list) > max_words and all(len(w) >= 3 for w in word_list):
+                    max_words = len(word_list)
+                    most_common_sound = sound
+            
+            if most_common_sound and len(consonant_clusters[most_common_sound]) >= 2:
+                # Create new line with alliteration
+                alliterative_words = [w for w in consonant_clusters[most_common_sound][:3] 
+                                    if len(w) >= 3]  # Additional length check
+                remaining_words = [w for w in words 
+                                 if w not in alliterative_words 
+                                 and len(w) >= 3][:2]  # Only use valid remaining words
+                
+                if len(alliterative_words) >= 2:  # Ensure we have at least 2 alliterative words
+                    new_line = ' '.join(alliterative_words + remaining_words)
+                    new_lines.append(new_line.capitalize())
+                else:
+                    new_lines.append(line)
+                
+                # Clear the used words
+                consonant_clusters[most_common_sound] = []
+            else:
+                new_lines.append(line)
+            
+            # Clear all categorized words for the next line
+            for sound in consonant_clusters:
+                consonant_clusters[sound] = []
+        
+        lines = new_lines
 
     if "Repetition" in devices and len(lines) > 2:
         # Repeats a phrase from the first line in every second line
@@ -84,12 +256,28 @@ def apply_poetic_devices(poem, devices):
                 lines[i] = lines[i] + " " + " ".join(repeated_phrase)
 
     if "Rhyme" in devices:
-        # Simulates rhyming by repeating the last word in brackets
-        for i in range(len(lines) - 1):
-            words = lines[i].split()
-            if words:
-                last_word = words[-1]
-                lines[i] = f"{' '.join(words)} ({last_word})"
+        new_lines = []
+        used_lines = set()
+        
+        # Find rhyming pairs
+        rhyme_pairs = find_rhyming_pairs(lines)
+        
+        # Sort by score
+        rhyme_pairs.sort(key=lambda x: x[2], reverse=True)
+        
+        # Apply rhymes in order of best scores
+        for i, j, score in rhyme_pairs:
+            if i not in used_lines and j not in used_lines:
+                new_lines.extend([lines[i], lines[j]])
+                used_lines.add(i)
+                used_lines.add(j)
+        
+        # Add remaining lines
+        for i, line in enumerate(lines):
+            if i not in used_lines:
+                new_lines.append(line)
+        
+        lines = new_lines
 
     if "Metaphor" in devices:
         # Replaces common words with metaphorical descriptions
@@ -113,38 +301,110 @@ def apply_poetic_devices(poem, devices):
 # Function to generate a thoughtful poem using the Markov chain model
 def generate_poem(start_word, num_lines, transition_matrix, devices, depth=2):
     """
-    Generates a poem using a Markov chain to create structured lines.
-
-    :param start_word: Initial word tuple to begin the poem
-    :param num_lines: Number of lines to generate
-    :param transition_matrix: Precomputed Markov model from the poet's text
-    :param devices: List of selected poetic devices
-    :param depth: Number of words used as context for generating text
-    :return: A formatted poem as a string
+    Generates a poem using a Markov chain with simpler rhyming.
     """
-    poem = []
-    
-    for _ in range(num_lines):
-        line = list(start_word)
-        for _ in range(random.randint(5, 12)):  # More varied word count per line
+    def get_rhyme_ending(word):
+        """Get the rhyming ending of a word"""
+        if len(word) < 4:
+            return None
+            
+        # Common rhyming patterns with their variants
+        patterns = {
+            'ing': ['ing', 'ring', 'sing', 'wing'],
+            'ight': ['ight', 'ite', 'yte', 'eight'],
+            'ound': ['ound', 'owned'],
+            'ead': ['ead', 'ed', 'eed'],
+            'ame': ['ame', 'aim'],
+            'ay': ['ay', 'ey', 'eigh'],
+            'ear': ['ear', 'eer', 'ere'],
+            'ine': ['ine', 'ign'],
+            'all': ['all', 'awl'],
+            'ow': ['ow', 'oe', 'o'],
+            'iss': ['iss', 'is'],
+            'est': ['est', 'essed']
+        }
+        
+        # Check for pattern matches
+        word = word.lower()
+        for main_pattern, variants in patterns.items():
+            if any(word.endswith(v) for v in variants):
+                return main_pattern
+        return word[-2:] if len(word) > 3 else None
+
+    def find_rhyming_word(word, available_words):
+        """Find a word that rhymes with the given word"""
+        if not word:
+            return None
+        ending = get_rhyme_ending(word)
+        if not ending:
+            return None
+            
+        candidates = [w for w in available_words 
+                     if len(w) >= 4 and w != word and get_rhyme_ending(w) == ending]
+        return random.choice(candidates) if candidates else None
+
+    def generate_line(start_words, target_end=None):
+        """Generate a line with optional target ending"""
+        line = list(start_words)
+        if target_end:
+            line.append(target_end)
+            return line
+            
+        for _ in range(8):  # Keep lines reasonably short
+            if len(line) >= 4:  # If line long enough
+                break
             key = tuple(line[-depth:])
+            if key not in transition_matrix:
+                break
             next_words = list(transition_matrix[key].keys())
             if not next_words:
-                break  
-            next_word = random.choices(next_words, weights=[transition_matrix[key][nw] for nw in next_words])[0]
+                break
+            next_word = random.choices(next_words, 
+                                     weights=[transition_matrix[key][w] for w in next_words])[0]
             line.append(next_word)
-        poem.append(' '.join(line).capitalize())
+        return line if len(line) >= 4 else None
 
-        # Choose a new starting phrase for variety
+    # Collect all available words
+    available_words = set()
+    for words in transition_matrix.values():
+        available_words.update(words.keys())
+
+    poem_lines = []
+    i = 0
+    while i < num_lines - 1:  # Process pairs of lines
+        # Generate first line
+        line1 = generate_line(start_word)
+        if not line1:
+            start_word = random.choice(list(transition_matrix.keys()))
+            continue
+            
+        # Try to find a rhyming word for second line
+        rhyme_word = find_rhyming_word(line1[-1], available_words)
+        if rhyme_word:
+            line2 = generate_line(random.choice(list(transition_matrix.keys())), rhyme_word)
+            if line2:
+                poem_lines.extend([' '.join(line1).capitalize(),
+                                 ' '.join(line2).capitalize()])
+                i += 2
+                start_word = random.choice(list(transition_matrix.keys()))
+                continue
+        
+        # If no rhyme found, just add the first line
+        poem_lines.append(' '.join(line1).capitalize())
+        i += 1
         start_word = random.choice(list(transition_matrix.keys()))
 
-    return apply_poetic_devices("\n".join(poem), devices)
+    # Add final line if needed
+    if i < num_lines:
+        if line1 := generate_line(start_word):
+            poem_lines.append(' '.join(line1).capitalize())
+
+    return apply_poetic_devices("\n".join(poem_lines), devices)
 
 # Function to handle poem generation in the UI
 def on_generate():
     """
     Triggers poem generation when the "Generate" button is pressed.
-    Retrieves user input, processes text, and displays the output.
     """
     selected_poet = poet_var.get()
     num_lines = int(lines_var.get())
@@ -152,40 +412,212 @@ def on_generate():
 
     if selected_poet and num_lines > 0:
         file_path = poet_files[selected_poet]
-        transition_matrix = preprocess_text(file_path)
-        start_word = random.choice(list(transition_matrix.keys()))
-        poem = generate_poem(start_word, num_lines, transition_matrix, selected_devices)
-        text_output.delete("1.0", tk.END)
-        text_output.insert(tk.INSERT, poem)
+        try:
+            transition_matrix = preprocess_text(file_path)
+            if not transition_matrix:
+                text_output.delete("1.0", tk.END)
+                text_output.insert(tk.INSERT, "Error: Could not generate poem from empty text file")
+                return
+                
+            start_word = random.choice(list(transition_matrix.keys()))
+            poem = generate_poem(start_word, num_lines, transition_matrix, selected_devices)
+            text_output.delete("1.0", tk.END)
+            text_output.insert(tk.INSERT, poem)
+        except Exception as e:
+            text_output.delete("1.0", tk.END)
+            text_output.insert(tk.INSERT, f"Error generating poem: {e}")
+
+# Add this before the GUI Setup section
+def copy_text():
+    """
+    Copies the text from the text output area to the clipboard with better error handling
+    and user feedback.
+    """
+    try:
+        text = text_output.get("1.0", "end-1c").strip()
+        if not text:
+            copy_button.config(text="❌ No text to copy", bg="#FFB6B6")
+            root.after(1000, lambda: copy_button.config(text="📋 Copy to Clipboard", bg="SystemButtonFace"))
+            return
+            
+        root.clipboard_clear()
+        root.clipboard_append(text)
+        root.clipboard_get()  # Verify copy worked
+        root.update()  # Required for Linux systems
+        
+        # Visual feedback
+        copy_button.config(text="✓ Copied!", bg="#90EE90")
+        root.after(1000, lambda: copy_button.config(text="📋 Copy to Clipboard", bg="SystemButtonFace"))
+        
+    except tk.TclError as e:
+        print(f"Clipboard error: {e}")
+        copy_button.config(text="❌ Copy failed", bg="#FFB6B6")
+        root.after(1000, lambda: copy_button.config(text="📋 Copy to Clipboard", bg="SystemButtonFace"))
+    except Exception as e:
+        print(f"Copy failed: {e}")
+        copy_button.config(text="❌ Copy failed", bg="#FFB6B6")
+        root.after(1000, lambda: copy_button.config(text="📋 Copy to Clipboard", bg="SystemButtonFace"))
+
+# Move this function definition to before the GUI Setup section
+def apply_xp_style():
+    style = ttk.Style()
+    style.theme_use('clam')  # Base theme
+    
+    # Configure colors - Soft Lavender-Pink theme
+    xp_colors = {
+        'bg': '#F8F0FF',           # Very soft lavender background
+        'button': '#E8D5F0',       # Soft lavender button
+        'highlight': '#D4B8E8',    # Medium lavender highlight
+        'border': '#C8A4D4',       # Darker lavender border
+        'title': '#B088C9',        # Deep lavender title
+        'text_bg': '#FDF4FF',      # Almost white lavender text background
+        'frame_bg': '#F4E6FF'      # Light lavender frame background
+    }
+    
+    # Apply styles
+    style.configure('TButton', 
+                   padding=5,
+                   relief="raised",
+                   background=xp_colors['button'])
+    
+    style.configure('TCombobox',
+                   fieldbackground=xp_colors['text_bg'],
+                   background=xp_colors['button'])
+    
+    style.configure('TSpinbox',
+                   fieldbackground=xp_colors['text_bg'],
+                   background=xp_colors['button'])
+    
+    return xp_colors
+
+# Also need to define create_poetic_device_frame before it's used
+def create_poetic_device_frame(parent):
+    device_frame = tk.Frame(parent, bg=xp_colors['frame_bg'], relief="groove", bd=2)
+    device_frame.pack(pady=5, padx=10, fill="x")
+    
+    tk.Label(device_frame, text="Poetic Devices", font=("Tahoma", 12, "bold"), 
+            bg=xp_colors['frame_bg'], fg=xp_colors['title']).pack(anchor="w", pady=2)
+    
+    device_vars = {}
+    for device in poetic_devices:
+        if device == "Rhyme":
+            rhyme_frame = tk.Frame(device_frame, bg=xp_colors['frame_bg'])
+            rhyme_frame.pack(anchor="w", padx=20)
+            
+            rhyme_var = tk.BooleanVar()
+            device_vars[device] = rhyme_var
+            rhyme_cb = tk.Checkbutton(rhyme_frame, text=device, variable=rhyme_var,
+                                    font=("Tahoma", 11), bg=xp_colors['frame_bg'],
+                                    activebackground=xp_colors['button'],
+                                    command=lambda: toggle_rhyme_schemes(rhyme_var.get()))
+            rhyme_cb.pack(anchor="w")
+            
+            scheme_frame = tk.Frame(rhyme_frame, bg=xp_colors['frame_bg'])
+            scheme_frame.pack(anchor="w", padx=30)
+            
+            scheme_var = tk.StringVar(value="AABB (Paired)")
+            device_vars["rhyme_scheme"] = scheme_var
+            
+            for scheme in rhyme_schemes:
+                tk.Radiobutton(scheme_frame, text=scheme, variable=scheme_var,
+                             value=scheme, font=("Tahoma", 10), bg=xp_colors['frame_bg'],
+                             activebackground=xp_colors['button'],
+                             state="disabled").pack(anchor="w")
+        else:
+            device_vars[device] = tk.BooleanVar()
+            tk.Checkbutton(device_frame, text=device, variable=device_vars[device],
+                          font=("Tahoma", 11), bg=xp_colors['frame_bg'],
+                          activebackground=xp_colors['button']).pack(anchor="w", padx=20)
+    
+    return device_vars
+
+def toggle_rhyme_schemes(enabled):
+    """Enable/disable rhyme scheme options based on Rhyme checkbox"""
+    state = "normal" if enabled else "disabled"
+    for widget in root.winfo_children():
+        if isinstance(widget, tk.Frame):
+            for subwidget in widget.winfo_children():
+                if isinstance(subwidget, tk.Radiobutton):
+                    subwidget.configure(state=state)
 
 # GUI Setup
 root = tk.Tk()
 root.title("🌸 Poem Generator 🌸")
-root.geometry("650x600")
-root.configure(bg="#FFF5E1")
+root.geometry("700x650")
 
-# UI Elements
-title_label = tk.Label(root, text="~ Poem Generator ~", font=("Edwardian Script ITC", 24, "bold"), bg="#FFF5E1", fg="#9055A2")
-title_label.pack(pady=10)
+# Apply Windows XP theme
+xp_colors = apply_xp_style()
+root.configure(bg=xp_colors['bg'])
+
+# Create title bar with XP style
+title_frame = tk.Frame(root, bg=xp_colors['title'], relief="raised", bd=1)
+title_frame.pack(fill="x", pady=(0, 10))
+title_label = tk.Label(title_frame, text="~ Markov's Muse - Poem Generator ~", 
+                      font=("Tahoma", 14, "bold"), bg=xp_colors['title'], fg="white", pady=5)
+title_label.pack()
+
+# Main content in XP-style frame
+content_frame = tk.Frame(root, bg=xp_colors['bg'], relief="groove", bd=2)
+content_frame.pack(padx=10, pady=5, fill="both", expand=True)
+
+# Poet selection with XP styling
+poet_frame = tk.LabelFrame(content_frame, text="Select Poet", 
+                          font=("Tahoma", 11, "bold"), bg=xp_colors['frame_bg'])
+poet_frame.pack(padx=10, pady=5, fill="x")
 
 poet_var = tk.StringVar()
-poet_dropdown = ttk.Combobox(root, textvariable=poet_var, values=list(poet_files.keys()), font=("Garamond", 14))
-poet_dropdown.pack(pady=5)
+poet_dropdown = ttk.Combobox(poet_frame, textvariable=poet_var, 
+                            values=list(poet_files.keys()), font=("Tahoma", 11))
+poet_dropdown.pack(pady=5, padx=10, fill="x")
 poet_dropdown.current(0)
 
+# Line count with XP styling
+lines_frame = tk.LabelFrame(content_frame, text="Number of Lines", 
+                           font=("Tahoma", 11, "bold"), bg=xp_colors['frame_bg'])
+lines_frame.pack(padx=10, pady=5, fill="x")
+
 lines_var = tk.StringVar()
-lines_entry = ttk.Spinbox(root, from_=1, to=50, textvariable=lines_var, width=5, font=("Garamond", 14))
+lines_entry = ttk.Spinbox(lines_frame, from_=1, to=50, textvariable=lines_var, 
+                         width=5, font=("Tahoma", 11))
 lines_entry.pack(pady=5)
 lines_entry.set(10)
 
-device_vars = {device: tk.BooleanVar() for device in poetic_devices}
-for device, var in device_vars.items():
-    tk.Checkbutton(root, text=device, variable=var, font=("Garamond", 14), bg="#FFF5E1").pack(anchor="w")
+# Add poetic devices frame
+device_vars = create_poetic_device_frame(content_frame)
 
-generate_button = tk.Button(root, text="✨ Generate Poem ✨", command=on_generate, font=("Garamond", 12, "bold"), bg="#F3B0C3")
-generate_button.pack(pady=15)
+# Generate button with XP styling
+generate_button = tk.Button(content_frame, text="✨ Generate Poem ✨", 
+                          command=on_generate, font=("Tahoma", 11, "bold"),
+                          bg=xp_colors['button'], relief="raised",
+                          activebackground=xp_colors['highlight'],
+                          activeforeground="white")
+generate_button.pack(pady=10)
 
-text_output = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=60, height=10, font=("Courier", 12), bg="#FEF9E7")
-text_output.pack(pady=10, fill=tk.BOTH, expand=True)
+# Output text area with XP styling
+text_output = scrolledtext.ScrolledText(content_frame, wrap=tk.WORD, 
+                                      width=60, height=12, 
+                                      font=("Lucida Console", 11),
+                                      bg=xp_colors['text_bg'], relief="sunken")
+text_output.pack(pady=10, padx=10, fill="both", expand=True)
+
+# Copy button with XP styling
+copy_button = tk.Button(content_frame, text="📋 Copy to Clipboard", 
+                       command=copy_text, font=("Tahoma", 11),
+                       bg=xp_colors['button'], relief="raised",
+                       activebackground=xp_colors['highlight'])
+copy_button.pack(pady=5)
+
+# Add right-click menu
+popup_menu = Menu(root, tearoff=0)
+popup_menu.add_command(label="Copy", command=copy_text)
+
+def show_popup(event):
+    popup_menu.tk_popup(event.x_root, event.y_root)
+
+text_output.bind("<Button-3>", show_popup)  # Right click
+text_output.bind("<Control-c>", lambda e: copy_text())  # Ctrl+C shortcut
+
+# Then in the GUI setup section, capture the returned device_vars
+device_vars = create_poetic_device_frame(content_frame)
 
 root.mainloop()
