@@ -1,3 +1,8 @@
+MAKE CUTE BUTTONS
+
+
+
+
 🌿 Markov's Muse: AI-Powered Poem Generator
 
 Welcome to Markov's Muse, a poetry generator that uses Markov Chains to create new poems inspired by the works of famous poets! This project lets users generate poems based on the styles of Emily Dickinson, Robert Frost, William Shakespeare, and Edgar Allan Poe.
