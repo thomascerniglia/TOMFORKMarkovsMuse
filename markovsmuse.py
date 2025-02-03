@@ -27,6 +27,46 @@ rhyme_schemes = [
     "ABBA (Enclosed)"
 ]
 
+# Add this to your constants section
+themes = {
+    "Default (Cute)": {
+        'bg': '#F8F0FF',           # Soft lavender background
+        'button': '#E8D5F0',       # Soft lavender button
+        'highlight': '#D4B8E8',    # Medium lavender highlight
+        'border': '#C8A4D4',       # Darker lavender border
+        'title': '#B088C9',        # Deep lavender title
+        'text_bg': '#FDF4FF',      # Almost white lavender text background
+        'frame_bg': '#F4E6FF'      # Light lavender frame background
+    },
+    "Vaporwave": {
+        'bg': '#FF6AD5',           # Hot pink
+        'button': '#C774E8',       # Purple
+        'highlight': '#AD8CFF',    # Light purple
+        'border': '#94D0FF',       # Light blue
+        'title': '#FF8DC7',        # Pink
+        'text_bg': '#FFCEF3',      # Light pink
+        'frame_bg': '#CAADFF'      # Soft purple
+    },
+    "Dark Mode": {
+        'bg': '#1A1A1A',           # Almost black
+        'button': '#333333',       # Dark gray
+        'highlight': '#4A4A4A',    # Medium gray
+        'border': '#2A2A2A',       # Darker gray
+        'title': '#8A2BE2',        # Bright purple
+        'text_bg': '#2D2D2D',      # Dark gray
+        'frame_bg': '#242424'      # Very dark gray
+    },
+    "Medieval": {
+        'bg': '#8B4513',           # Saddle brown
+        'button': '#CD853F',       # Peru
+        'highlight': '#DEB887',    # Burly wood
+        'border': '#8B7355',       # Dark goldenrod
+        'title': '#800000',        # Maroon
+        'text_bg': '#F5DEB3',      # Wheat
+        'frame_bg': '#D2B48C'      # Tan
+    }
+}
+
 # Function to preprocess the text and build the Markov chain
 def preprocess_text(file_path, depth=2):
     """
@@ -458,23 +498,13 @@ def copy_text():
         copy_button.config(text="❌ Copy failed", bg="#FFB6B6")
         root.after(1000, lambda: copy_button.config(text="📋 Copy to Clipboard", bg="SystemButtonFace"))
 
-# Move this function definition to before the GUI Setup section
-def apply_xp_style():
+# Update apply_xp_style to accept a theme name
+def apply_xp_style(theme_name="Default (Cute)"):
     style = ttk.Style()
-    style.theme_use('clam')  # Base theme
+    style.theme_use('clam')
     
-    # Configure colors - Soft Lavender-Pink theme
-    xp_colors = {
-        'bg': '#F8F0FF',           # Very soft lavender background
-        'button': '#E8D5F0',       # Soft lavender button
-        'highlight': '#D4B8E8',    # Medium lavender highlight
-        'border': '#C8A4D4',       # Darker lavender border
-        'title': '#B088C9',        # Deep lavender title
-        'text_bg': '#FDF4FF',      # Almost white lavender text background
-        'frame_bg': '#F4E6FF'      # Light lavender frame background
-    }
+    xp_colors = themes[theme_name]
     
-    # Apply styles
     style.configure('TButton', 
                    padding=5,
                    relief="raised",
@@ -520,9 +550,10 @@ def create_poetic_device_frame(parent):
             
             for scheme in rhyme_schemes:
                 tk.Radiobutton(scheme_frame, text=scheme, variable=scheme_var,
-                             value=scheme, font=("Tahoma", 10), bg=xp_colors['frame_bg'],
-                             activebackground=xp_colors['button'],
-                             state="disabled").pack(anchor="w")
+                              value=scheme, font=("Tahoma", 10), 
+                              bg=xp_colors['frame_bg'],
+                              activebackground=xp_colors['frame_bg'],
+                              state="disabled").pack(anchor="w")
         else:
             device_vars[device] = tk.BooleanVar()
             tk.Checkbutton(device_frame, text=device, variable=device_vars[device],
@@ -540,6 +571,125 @@ def toggle_rhyme_schemes(enabled):
                 if isinstance(subwidget, tk.Radiobutton):
                     subwidget.configure(state=state)
 
+# Add these functions before the GUI Setup section
+def show_popup(event):
+    """Show right-click menu"""
+    popup_menu.tk_popup(event.x_root, event.y_root)
+
+def change_theme(event=None):
+    """Change the application theme"""
+    global xp_colors
+    theme_name = theme_var.get()
+    xp_colors = apply_xp_style(theme_name)
+    
+    # Update all existing widgets with new colors
+    root.configure(bg=xp_colors['bg'])
+    title_frame.configure(bg=xp_colors['title'])
+    title_label.configure(bg=xp_colors['title'])
+    content_frame.configure(bg=xp_colors['bg'])
+    
+    # Update all frames and their children
+    for frame in [poet_frame, lines_frame, theme_frame]:
+        frame.configure(bg=xp_colors['frame_bg'])
+    
+    # Update poetic devices frame and its widgets
+    for widget in content_frame.winfo_children():
+        if isinstance(widget, tk.Frame):
+            widget.configure(bg=xp_colors['frame_bg'])
+            
+            # First level - main frames
+            for child in widget.winfo_children():
+                if isinstance(child, (tk.Checkbutton, tk.Radiobutton, tk.Label)):
+                    child.configure(bg=xp_colors['frame_bg'])
+                
+                # Second level - rhyme frame
+                if isinstance(child, tk.Frame):
+                    child.configure(bg=xp_colors['frame_bg'])
+                    
+                    # Third level - scheme frame (where AABB, etc. are)
+                    for subchild in child.winfo_children():
+                        if isinstance(subchild, tk.Frame):
+                            # This is the scheme frame
+                            subchild.configure(bg=xp_colors['frame_bg'])
+                            # Update all radio buttons inside scheme frame
+                            for radio in subchild.winfo_children():
+                                if isinstance(radio, tk.Radiobutton):
+                                    radio.configure(
+                                        bg=xp_colors['frame_bg'],
+                                        activebackground=xp_colors['frame_bg'],
+                                        selectcolor=xp_colors['frame_bg']
+                                    )
+                        elif isinstance(subchild, (tk.Checkbutton, tk.Radiobutton, tk.Label)):
+                            subchild.configure(bg=xp_colors['frame_bg'])
+    
+    # Update buttons
+    for button in [generate_button, copy_button]:
+        button.configure(bg=xp_colors['button'],
+                       activebackground=xp_colors['highlight'])
+    
+    # Update text area and text colors
+    text_output.configure(bg=xp_colors['text_bg'])
+    
+    # If using dark mode, adjust all text colors
+    if theme_name == "Dark Mode":
+        text_output.configure(fg='white')
+        title_label.configure(fg='white')
+        generate_button.configure(fg='white')
+        copy_button.configure(fg='white')
+        
+        # Update combobox and spinbox styles for dark mode
+        style = ttk.Style()
+        style.configure('TCombobox', fieldbackground=xp_colors['text_bg'], foreground='white')
+        style.configure('TSpinbox', fieldbackground=xp_colors['text_bg'], foreground='white')
+        style.map('TCombobox', fieldbackground=[('readonly', xp_colors['text_bg'])])
+        style.map('TSpinbox', fieldbackground=[('readonly', xp_colors['text_bg'])])
+        
+        # Force update comboboxes
+        theme_dropdown.configure(style='TCombobox')
+        poet_dropdown.configure(style='TCombobox')
+        lines_entry.configure(style='TSpinbox')
+        
+        # Update all text in frames
+        for frame in content_frame.winfo_children():
+            if isinstance(frame, tk.LabelFrame):
+                frame.configure(fg='white')
+            for widget in frame.winfo_children():
+                if isinstance(widget, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
+                    widget.configure(fg='white')
+                if isinstance(widget, tk.Frame):
+                    for subwidget in widget.winfo_children():
+                        if isinstance(subwidget, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
+                            subwidget.configure(fg='white')
+    else:
+        text_output.configure(fg='black')
+        title_label.configure(fg='white')
+        generate_button.configure(fg='black')
+        copy_button.configure(fg='black')
+        
+        # Reset combobox and spinbox styles
+        style = ttk.Style()
+        style.configure('TCombobox', fieldbackground=xp_colors['text_bg'], foreground='black')
+        style.configure('TSpinbox', fieldbackground=xp_colors['text_bg'], foreground='black')
+        style.map('TCombobox', fieldbackground=[('readonly', xp_colors['text_bg'])])
+        style.map('TSpinbox', fieldbackground=[('readonly', xp_colors['text_bg'])])
+        
+        # Force update comboboxes
+        theme_dropdown.configure(style='TCombobox')
+        poet_dropdown.configure(style='TCombobox')
+        lines_entry.configure(style='TSpinbox')
+        
+        # Reset text colors
+        for frame in content_frame.winfo_children():
+            if isinstance(frame, tk.LabelFrame):
+                frame.configure(fg='black')
+            for widget in frame.winfo_children():
+                if isinstance(widget, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
+                    widget.configure(fg='black')
+                if isinstance(widget, tk.Frame):
+                    for subwidget in widget.winfo_children():
+                        if isinstance(subwidget, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
+                            subwidget.configure(fg='black')
+
 # GUI Setup
 root = tk.Tk()
 root.title("🌸 Poem Generator 🌸")
@@ -556,9 +706,20 @@ title_label = tk.Label(title_frame, text="~ Markov's Muse - Poem Generator ~",
                       font=("Tahoma", 14, "bold"), bg=xp_colors['title'], fg="white", pady=5)
 title_label.pack()
 
-# Main content in XP-style frame
+# Create main content frame
 content_frame = tk.Frame(root, bg=xp_colors['bg'], relief="groove", bd=2)
 content_frame.pack(padx=10, pady=5, fill="both", expand=True)
+
+# Add theme frame
+theme_frame = tk.LabelFrame(content_frame, text="Theme", 
+                          font=("Tahoma", 11, "bold"), bg=xp_colors['frame_bg'])
+theme_frame.pack(padx=10, pady=5, fill="x")
+
+theme_var = tk.StringVar(value="Default (Cute)")
+theme_dropdown = ttk.Combobox(theme_frame, textvariable=theme_var, 
+                            values=list(themes.keys()), font=("Tahoma", 11))
+theme_dropdown.pack(pady=5, padx=10, fill="x")
+theme_dropdown.bind('<<ComboboxSelected>>', change_theme)
 
 # Poet selection with XP styling
 poet_frame = tk.LabelFrame(content_frame, text="Select Poet", 
@@ -611,13 +772,9 @@ copy_button.pack(pady=5)
 popup_menu = Menu(root, tearoff=0)
 popup_menu.add_command(label="Copy", command=copy_text)
 
-def show_popup(event):
-    popup_menu.tk_popup(event.x_root, event.y_root)
-
+# Bind events
 text_output.bind("<Button-3>", show_popup)  # Right click
 text_output.bind("<Control-c>", lambda e: copy_text())  # Ctrl+C shortcut
 
-# Then in the GUI setup section, capture the returned device_vars
-device_vars = create_poetic_device_frame(content_frame)
-
+# Start the main loop
 root.mainloop()
