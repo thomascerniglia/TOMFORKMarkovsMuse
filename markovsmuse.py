@@ -37,23 +37,26 @@ class PoemBrowser(tk.Toplevel):
         # Apply current theme
         self.configure(bg=xp_colors['bg'])
         current_font = themes[theme_var.get()]['font']
+        is_dark = theme_var.get() == "Dark Mode"
+        text_color = 'white' if is_dark else 'black'
         
         # Create top control frame
         control_frame = tk.Frame(self, bg=xp_colors['frame_bg'], relief="groove", bd=2)
         control_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
-        control_frame.grid_columnconfigure(1, weight=1)  # Make search frame expand
+        control_frame.grid_columnconfigure(1, weight=1)
         
         # Add sort options
         sort_frame = tk.Frame(control_frame, bg=xp_colors['frame_bg'])
         sort_frame.grid(row=0, column=0, padx=10)
         
         tk.Label(sort_frame, text="Sort by:", font=current_font, 
-                bg=xp_colors['frame_bg']).pack(side=tk.LEFT)
+                bg=xp_colors['frame_bg'], fg=text_color).pack(side=tk.LEFT)
         
         self.sort_var = tk.StringVar(value="Date (Newest)")
         sort_options = ["Date (Newest)", "Date (Oldest)", "Poet A-Z", "Poet Z-A", "Favorites First"]
         sort_menu = ttk.Combobox(sort_frame, textvariable=self.sort_var, 
-                                values=sort_options, font=current_font, width=15)
+                                values=sort_options, font=current_font, width=15,
+                                foreground=text_color)
         sort_menu.pack(side=tk.LEFT, padx=5)
         sort_menu.bind('<<ComboboxSelected>>', lambda e: self.load_poem_list())
         
@@ -63,7 +66,7 @@ class PoemBrowser(tk.Toplevel):
         search_frame.grid_columnconfigure(1, weight=1)  # Make entry expand
         
         tk.Label(search_frame, text="Search:", font=current_font, 
-                bg=xp_colors['frame_bg']).grid(row=0, column=0, padx=(0,5))
+                bg=xp_colors['frame_bg'], fg=text_color).grid(row=0, column=0, padx=(0,5))
         
         self.search_var = tk.StringVar()
         self.search_var.trace('w', self.filter_poems)
@@ -103,14 +106,14 @@ class PoemBrowser(tk.Toplevel):
         
         # Preview header
         self.preview_header = tk.Label(preview_frame, text="", font=current_font,
-                                     bg=xp_colors['frame_bg'], anchor="w")
+                                     bg=xp_colors['frame_bg'], anchor="w", fg=text_color)
         self.preview_header.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
         
         # Preview text
         self.preview_text = scrolledtext.ScrolledText(preview_frame, 
                                                     font=current_font,
                                                     bg=xp_colors['text_bg'],
-                                                    wrap=tk.WORD)
+                                                    wrap=tk.WORD, fg=text_color)
         self.preview_text.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         
         # Button frame
@@ -129,10 +132,15 @@ class PoemBrowser(tk.Toplevel):
             button_frame.grid_columnconfigure(i, weight=1)  # Make buttons expand equally
             tk.Button(button_frame, text=text, command=command,
                      font=current_font, bg=xp_colors['button'],
-                     activebackground=xp_colors['highlight']).grid(row=0, column=i, padx=2, sticky="ew")
+                     activebackground=xp_colors['highlight'], fg=text_color).grid(row=0, column=i, padx=2, sticky="ew")
         
         # Load poems
         self.load_poem_list()
+        
+        # Configure text colors for list and preview
+        self.poem_list.configure(fg=text_color)
+        self.preview_text.configure(fg=text_color)
+        self.preview_header.configure(fg=text_color)
     
     def load_poem_list(self):
         """Load and display the list of saved poems"""
@@ -1114,66 +1122,48 @@ def change_theme(event=None):
         font=current_font
     )
     
-    # Update any popup menus or dialogs that might be open
+    # Update any poem browsers
     for widget in root.winfo_children():
         if isinstance(widget, tk.Toplevel):
             widget.configure(bg=xp_colors['bg'])
+            
+            # Update all text widgets in the poem browser
             for child in widget.winfo_children():
-                if isinstance(child, scrolledtext.ScrolledText):
-                    child.configure(
-                        bg=xp_colors['text_bg'],
-                        fg='white' if theme_name == "Dark Mode" else 'black',
-                        font=current_font
-                    )
-                elif isinstance(child, tk.Button):
-                    child.configure(
-                        bg=xp_colors['button'],
-                        activebackground=xp_colors['highlight'],
-                        font=current_font,
-                        fg='white' if theme_name == "Dark Mode" else 'black'
-                    )
-    
-    if theme_name == "Dark Mode":
-        # Make poetic devices text white in dark mode
-        for widget in content_frame.winfo_children():
-            if isinstance(widget, tk.Frame):  # Main poetic devices frame
-                for child in widget.winfo_children():
-                    if isinstance(child, tk.Label):
-                        child.configure(fg='white')
-                    elif isinstance(child, tk.Checkbutton):
-                        child.configure(fg='white')
-                    elif isinstance(child, tk.Frame):  # Rhyme frame
-                        for subchild in child.winfo_children():
-                            if isinstance(subchild, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
-                                subchild.configure(fg='white')
-                            elif isinstance(subchild, tk.Frame):  # Scheme frame
-                                for item in subchild.winfo_children():
-                                    if isinstance(item, (tk.Label, tk.Radiobutton)):
-                                        item.configure(fg='white')
-    
-    else:  # Light mode and other themes
-        # Reset section labels to black
-        for frame in [theme_frame, poet_frame, lines_frame]:
-            if isinstance(frame, tk.LabelFrame):
-                frame.configure(fg='black')  # Update the frame label itself
-            for widget in frame.winfo_children():
-                if isinstance(widget, (tk.Label, ttk.Label)):
-                    widget.configure(fg='black')
-                elif isinstance(widget, ttk.Combobox):
-                    widget.configure(foreground='black')
-                elif isinstance(widget, ttk.Spinbox):
-                    widget.configure(foreground='black')
-        
-        # Update poetic devices text and frame
-        for widget in content_frame.winfo_children():
-            if isinstance(widget, tk.Frame):  # Main poetic devices frame
-                for child in widget.winfo_children():
-                    if isinstance(child, tk.Label):
-                        if "bold" in str(child.cget("font")):  # This is the "Poetic Devices" label
-                            child.configure(fg=xp_colors['title'])  # Reset to title color
-                    # ... rest of the poetic devices widgets ...
-        
-        # ... (rest of light mode code) ...
+                if isinstance(child, tk.Frame):
+                    child.configure(bg=xp_colors['frame_bg'])
+                    for subchild in child.winfo_children():
+                        if isinstance(subchild, tk.Frame):
+                            subchild.configure(bg=xp_colors['frame_bg'])
+                            for item in subchild.winfo_children():
+                                if isinstance(item, (tk.Label, ttk.Label)):
+                                    item.configure(
+                                        bg=xp_colors['frame_bg'],
+                                        fg='white' if theme_name == "Dark Mode" else 'black',
+                                        font=current_font
+                                    )
+                                elif isinstance(item, ttk.Combobox):  # Add this for sort options
+                                    item.configure(
+                                        foreground='white' if theme_name == "Dark Mode" else 'black',
+                                        font=current_font
+                                    )
+                                elif isinstance(item, tk.Listbox):
+                                    item.configure(
+                                        bg=xp_colors['text_bg'],
+                                        fg='white' if theme_name == "Dark Mode" else 'black',
+                                        font=current_font
+                                    )
+                                elif isinstance(item, scrolledtext.ScrolledText):
+                                    item.configure(
+                                        bg=xp_colors['text_bg'],
+                                        fg='white' if theme_name == "Dark Mode" else 'black',
+                                        font=current_font
+                                    )
+                                elif isinstance(item, tk.Label):
+                                    item.configure(
+                                        bg=xp_colors['frame_bg'],
+                                        fg='white' if theme_name == "Dark Mode" else 'black',
+                                        font=current_font
+                                    )
 
 # Add these functions for save/load functionality
 def save_current_poem():
@@ -1308,24 +1298,28 @@ root.grid_columnconfigure(0, weight=1)
 xp_colors = apply_xp_style()
 root.configure(bg=xp_colors['bg'])
 
+# Create theme variable after root
+theme_var = tk.StringVar(value="Default (Cute)")
+
 # Create main container that will scale
 main_container = tk.Frame(root, bg=xp_colors['bg'])
 main_container.grid(row=0, column=0, sticky="nsew")
 main_container.grid_columnconfigure(0, weight=1)
 main_container.grid_rowconfigure(1, weight=1)
 
-# Add status bar
-status_bar = tk.Label(main_container, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W,
-                     font=themes["Default (Cute)"]['font'], bg=xp_colors['frame_bg'])
-status_bar.grid(row=2, column=0, sticky="ew")
-
 # Create title bar with XP style
 title_frame = tk.Frame(main_container, bg=xp_colors['title'], relief="raised", bd=1)
 title_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
 title_label = tk.Label(title_frame, text="~ Markov's Muse - Poem Generator ~", 
                       font=themes["Default (Cute)"]['title_font'], 
-                      bg=xp_colors['title'], fg="white", pady=5)
+                      bg=xp_colors['title'],
+                      fg="white", pady=5)
 title_label.pack()
+
+# Add status bar
+status_bar = tk.Label(main_container, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W,
+                     font=themes["Default (Cute)"]['font'], bg=xp_colors['frame_bg'])
+status_bar.grid(row=2, column=0, sticky="ew")
 
 # Create scrollable content frame
 canvas = tk.Canvas(main_container, bg=xp_colors['bg'])
@@ -1355,7 +1349,6 @@ theme_frame = tk.LabelFrame(content_frame, text="Theme",
                           bg=xp_colors['frame_bg'])
 theme_frame.pack(padx=10, pady=5, fill="x")
 
-theme_var = tk.StringVar(value="Default (Cute)")
 theme_dropdown = ttk.Combobox(theme_frame, textvariable=theme_var, 
                             values=list(themes.keys()), 
                             font=themes["Default (Cute)"]['font'])
