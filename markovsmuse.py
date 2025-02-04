@@ -7,6 +7,20 @@ import json
 from datetime import datetime
 import os
 from pathlib import Path
+import time
+import threading
+
+# Move the SHORTCUTS dictionary to the top with other constants
+SHORTCUTS = {
+    '<Control-g>': 'Generate Poem',
+    '<Control-s>': 'Save Poem',
+    '<Control-o>': 'Load Poem',
+    '<Control-b>': 'Browse Poems',
+    '<Control-z>': 'Undo',
+    '<Control-y>': 'Redo',
+    '<Control-c>': 'Copy',
+    '<Escape>': 'Clear'
+}
 
 # After imports and before poet_files dictionary
 class PoemBrowser(tk.Toplevel):
@@ -883,7 +897,8 @@ def create_poetic_device_frame(parent):
             device_vars[device] = rhyme_var
             rhyme_cb = tk.Checkbutton(rhyme_frame, text=device, variable=rhyme_var,
                                     font=("Tahoma", 11), bg=xp_colors['frame_bg'],
-                                    activebackground=xp_colors['button'],
+                                    activebackground=xp_colors['frame_bg'],
+                                    selectcolor=xp_colors['frame_bg'],
                                     command=lambda: toggle_rhyme_schemes(rhyme_var.get()))
             rhyme_cb.pack(anchor="w")
             
@@ -893,33 +908,66 @@ def create_poetic_device_frame(parent):
             scheme_var = tk.StringVar(value="AABB (Paired)")
             device_vars["rhyme_scheme"] = scheme_var
             
+            tk.Label(scheme_frame, text="Scheme:", 
+                    font=("Tahoma", 11), 
+                    bg=xp_colors['frame_bg']).pack(side=tk.LEFT, padx=(0, 5))
+            
             for scheme in rhyme_schemes:
                 tk.Radiobutton(scheme_frame, text=scheme, variable=scheme_var,
-                              value=scheme, font=("Tahoma", 10), 
-                              bg=xp_colors['frame_bg'],
-                              activebackground=xp_colors['frame_bg'],
-                              state="disabled").pack(anchor="w")
+                             value=scheme, font=("Tahoma", 10), 
+                             bg=xp_colors['frame_bg'],
+                             activebackground=xp_colors['frame_bg'],
+                             selectcolor=xp_colors['frame_bg'],
+                             state="disabled").pack(side=tk.LEFT, padx=5)
         else:
             device_vars[device] = tk.BooleanVar()
             tk.Checkbutton(device_frame, text=device, variable=device_vars[device],
                           font=("Tahoma", 11), bg=xp_colors['frame_bg'],
-                          activebackground=xp_colors['button']).pack(anchor="w", padx=20)
+                          activebackground=xp_colors['frame_bg'],
+                          selectcolor=xp_colors['frame_bg']).pack(anchor="w", padx=20)
+    
+    def toggle_rhyme_schemes(enabled):
+        """Enable/disable rhyme scheme options"""
+        state = "normal" if enabled else "disabled"
+        for widget in scheme_frame.winfo_children():
+            if isinstance(widget, tk.Radiobutton):
+                widget.configure(state=state)
     
     return device_vars
 
 def toggle_rhyme_schemes(enabled):
     """Enable/disable rhyme scheme options based on Rhyme checkbox"""
     state = "normal" if enabled else "disabled"
-    for widget in root.winfo_children():
-        if isinstance(widget, tk.Frame):
-            for subwidget in widget.winfo_children():
-                if isinstance(subwidget, tk.Radiobutton):
-                    subwidget.configure(state=state)
+    for widget in scheme_frame.winfo_children():
+        if isinstance(widget, tk.Radiobutton):
+            widget.configure(state=state)
 
 # Add these functions before the GUI Setup section
 def show_popup(event):
     """Show right-click menu"""
     popup_menu.tk_popup(event.x_root, event.y_root)
+
+def fade_color(widget, from_color, to_color, steps=10, duration=200):
+    """Smoothly transition between two colors"""
+    def rgb_to_hex(rgb):
+        return '#{:02x}{:02x}{:02x}'.format(*rgb)
+    
+    def hex_to_rgb(hex_color):
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    
+    def update_color(step):
+        if step <= steps:
+            t = step / steps
+            current_rgb = tuple(int(from_rgb[j] + (to_rgb[j] - from_rgb[j]) * t) for j in range(3))
+            current_color = rgb_to_hex(current_rgb)
+            widget.configure(bg=current_color)
+            # Schedule next update
+            widget.after(duration // steps, update_color, step + 1)
+    
+    from_rgb = hex_to_rgb(from_color)
+    to_rgb = hex_to_rgb(to_color)
+    update_color(0)
 
 def change_theme(event=None):
     """Change the application theme"""
@@ -934,7 +982,11 @@ def change_theme(event=None):
     
     # Update title
     title_frame.configure(bg=xp_colors['title'])
-    title_label.configure(bg=xp_colors['title'], font=title_font)
+    title_label.configure(
+        bg=xp_colors['title'],
+        font=title_font,
+        fg='white' if theme_name == "Dark Mode" else 'black'
+    )
     
     # Update all frames and their contents
     content_frame.configure(bg=xp_colors['bg'])
@@ -942,10 +994,8 @@ def change_theme(event=None):
     # Update all frames and their children
     for frame in [poet_frame, lines_frame, theme_frame]:
         frame.configure(bg=xp_colors['frame_bg'])
-        # Update frame label font
         if isinstance(frame, tk.LabelFrame):
             frame.configure(font=current_font)
-        # Update all widgets in the frame
         for widget in frame.winfo_children():
             if isinstance(widget, (tk.Label, tk.Button)):
                 widget.configure(font=current_font)
@@ -956,47 +1006,147 @@ def change_theme(event=None):
     
     # Update poetic devices frame and its widgets
     for widget in content_frame.winfo_children():
-        if isinstance(widget, tk.Frame):
+        if isinstance(widget, tk.Frame):  # Main poetic devices frame
             widget.configure(bg=xp_colors['frame_bg'])
-            if isinstance(widget, tk.LabelFrame):
-                widget.configure(font=current_font)
             
-            # First level - main frames
+            # Update all widgets in the frame
             for child in widget.winfo_children():
-                if isinstance(child, (tk.Checkbutton, tk.Radiobutton, tk.Label)):
-                    child.configure(bg=xp_colors['frame_bg'], font=current_font)
-                
-                # Second level - rhyme frame
-                if isinstance(child, tk.Frame):
+                if isinstance(child, tk.Label):
+                    if "bold" in str(child.cget("font")):
+                        child.configure(
+                            bg=xp_colors['frame_bg'],
+                            fg=xp_colors['title'],
+                            font=("Tahoma", 12, "bold")
+                        )
+                    else:
+                        child.configure(
+                            bg=xp_colors['frame_bg'],
+                            font=("Tahoma", 11)
+                        )
+                elif isinstance(child, tk.Checkbutton):
+                    child.configure(
+                        bg=xp_colors['frame_bg'],
+                        activebackground=xp_colors['frame_bg'],
+                        selectcolor=xp_colors['frame_bg'],
+                        font=("Tahoma", 11)
+                    )
+                elif isinstance(child, tk.Frame):  # Rhyme frame
                     child.configure(bg=xp_colors['frame_bg'])
-                    
-                    # Third level - scheme frame
                     for subchild in child.winfo_children():
-                        if isinstance(subchild, tk.Frame):
+                        if isinstance(subchild, tk.Checkbutton):
+                            subchild.configure(
+                                bg=xp_colors['frame_bg'],
+                                activebackground=xp_colors['frame_bg'],
+                                selectcolor=xp_colors['frame_bg'],
+                                font=("Tahoma", 11)
+                            )
+                        elif isinstance(subchild, tk.Frame):  # Scheme frame
                             subchild.configure(bg=xp_colors['frame_bg'])
-                            for radio in subchild.winfo_children():
-                                if isinstance(radio, tk.Radiobutton):
-                                    radio.configure(
+                            for item in subchild.winfo_children():
+                                if isinstance(item, tk.Label):
+                                    item.configure(
+                                        bg=xp_colors['frame_bg'],
+                                        font=("Tahoma", 11)
+                                    )
+                                elif isinstance(item, tk.Radiobutton):
+                                    item.configure(
                                         bg=xp_colors['frame_bg'],
                                         activebackground=xp_colors['frame_bg'],
                                         selectcolor=xp_colors['frame_bg'],
-                                        font=current_font
+                                        font=("Tahoma", 10)
                                     )
-                        elif isinstance(subchild, (tk.Checkbutton, tk.Radiobutton, tk.Label)):
-                            subchild.configure(bg=xp_colors['frame_bg'], font=current_font)
     
-    # Update the new button frame and buttons
+    # Update text output area
+    text_output.configure(
+        bg=xp_colors['text_bg'],
+        fg='white' if theme_name == "Dark Mode" else 'black',
+        font=current_font
+    )
+    
+    # Update all buttons in the main button frame
     button_frame.configure(bg=xp_colors['frame_bg'])
-    for button in [save_button, load_button, export_button]:
+    all_buttons = [
+        generate_button,
+        copy_button, 
+        save_button,
+        load_button,
+        export_button,
+        browse_button,
+        help_button
+    ]
+    
+    for button in all_buttons:
         button.configure(
             bg=xp_colors['button'],
             activebackground=xp_colors['highlight'],
-            font=current_font
+            font=current_font,
+            fg='white' if theme_name == "Dark Mode" else 'black'
         )
-        if theme_name == "Dark Mode":
-            button.configure(fg='white')
-        else:
-            button.configure(fg='black')
+    
+    # Update the Generate Poem button separately since it might have different styling
+    generate_button.configure(
+        bg=xp_colors['button'],
+        activebackground=xp_colors['highlight'],
+        font=current_font,
+        fg='white' if theme_name == "Dark Mode" else 'black'
+    )
+    
+    # Update status bar
+    status_bar.configure(
+        bg=xp_colors['frame_bg'],
+        fg='white' if theme_name == "Dark Mode" else 'black',
+        font=current_font
+    )
+    
+    # Update any popup menus or dialogs that might be open
+    for widget in root.winfo_children():
+        if isinstance(widget, tk.Toplevel):
+            widget.configure(bg=xp_colors['bg'])
+            for child in widget.winfo_children():
+                if isinstance(child, scrolledtext.ScrolledText):
+                    child.configure(
+                        bg=xp_colors['text_bg'],
+                        fg='white' if theme_name == "Dark Mode" else 'black',
+                        font=current_font
+                    )
+                elif isinstance(child, tk.Button):
+                    child.configure(
+                        bg=xp_colors['button'],
+                        activebackground=xp_colors['highlight'],
+                        font=current_font,
+                        fg='white' if theme_name == "Dark Mode" else 'black'
+                    )
+    
+    # Handle dark mode text colors for poetic devices
+    if theme_name == "Dark Mode":
+        for widget in content_frame.winfo_children():
+            if isinstance(widget, tk.Frame):
+                for child in widget.winfo_children():
+                    if isinstance(child, (tk.Label, tk.Checkbutton)):
+                        child.configure(fg='white')
+                    if isinstance(child, tk.Frame):
+                        for subchild in child.winfo_children():
+                            if isinstance(subchild, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
+                                subchild.configure(fg='white')
+                            if isinstance(subchild, tk.Frame):
+                                for item in subchild.winfo_children():
+                                    if isinstance(item, (tk.Label, tk.Radiobutton)):
+                                        item.configure(fg='white')
+    else:
+        for widget in content_frame.winfo_children():
+            if isinstance(widget, tk.Frame):
+                for child in widget.winfo_children():
+                    if isinstance(child, (tk.Label, tk.Checkbutton)):
+                        if not "bold" in str(child.cget("font")):
+                            child.configure(fg='black')
+                    if isinstance(child, tk.Frame):
+                        for subchild in child.winfo_children():
+                            if isinstance(subchild, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
+                                subchild.configure(fg='black')
+                            if isinstance(subchild, tk.Frame):
+                                for item in subchild.winfo_children():
+                                    if isinstance(item, (tk.Label, tk.Radiobutton)):
+                                        item.configure(fg='black')
 
 # Add these functions for save/load functionality
 def save_current_poem():
@@ -1096,11 +1246,32 @@ def export_poem():
     except Exception as e:
         messagebox.showerror("Error", f"Failed to export poem: {str(e)}")
 
+# Add status bar to main window
+def show_status(message, duration=3000):
+    """Show a message in the status bar and clear it after duration"""
+    status_bar.config(text=message)
+    root.after(duration, lambda: status_bar.config(text="Ready"))
+
+# Add keyboard shortcut handling
+def handle_shortcut(event):
+    """Handle keyboard shortcuts and show in status bar"""
+    if event.keysym == 'g' and event.state & 4:  # Control-G
+        show_status("Generating poem...")
+        on_generate()
+    elif event.keysym == 's' and event.state & 4:  # Control-S
+        show_status("Saving poem...")
+        save_current_poem()
+    elif event.keysym == 'z' and event.state & 4:  # Control-Z
+        undo_action()
+    elif event.keysym == 'y' and event.state & 4:  # Control-Y
+        redo_action()
+    # ... add other shortcuts
+
 # GUI Setup
 root = tk.Tk()
 root.title("🌸 Poem Generator 🌸")
 root.geometry("700x650")
-root.minsize(600, 500)  # Set minimum window size
+root.minsize(600, 500)
 
 # Make the root window scalable
 root.grid_rowconfigure(0, weight=1)
@@ -1114,7 +1285,12 @@ root.configure(bg=xp_colors['bg'])
 main_container = tk.Frame(root, bg=xp_colors['bg'])
 main_container.grid(row=0, column=0, sticky="nsew")
 main_container.grid_columnconfigure(0, weight=1)
-main_container.grid_rowconfigure(1, weight=1)  # Make content frame expandable
+main_container.grid_rowconfigure(1, weight=1)
+
+# Add status bar
+status_bar = tk.Label(main_container, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W,
+                     font=themes["Default (Cute)"]['font'], bg=xp_colors['frame_bg'])
+status_bar.grid(row=2, column=0, sticky="ew")
 
 # Create title bar with XP style
 title_frame = tk.Frame(main_container, bg=xp_colors['title'], relief="raised", bd=1)
@@ -1252,6 +1428,112 @@ def on_mousewheel(event):
     canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
 canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+# Add after the imports
+class UndoRedoManager:
+    def __init__(self, text_widget):
+        self.text_widget = text_widget
+        self.undo_stack = []
+        self.redo_stack = []
+        self.last_state = ""
+        
+    def save_state(self):
+        """Save current state for undo"""
+        current_state = self.text_widget.get("1.0", "end-1c")
+        if current_state != self.last_state:
+            self.undo_stack.append(self.last_state)
+            self.last_state = current_state
+            self.redo_stack.clear()
+            
+    def undo(self):
+        """Restore last state"""
+        if self.undo_stack:
+            current_state = self.text_widget.get("1.0", "end-1c")
+            self.redo_stack.append(current_state)
+            last_state = self.undo_stack.pop()
+            self.text_widget.delete("1.0", tk.END)
+            self.text_widget.insert("1.0", last_state)
+            self.last_state = last_state
+            show_status("Undo")
+            
+    def redo(self):
+        """Redo last undone action"""
+        if self.redo_stack:
+            current_state = self.text_widget.get("1.0", "end-1c")
+            self.undo_stack.append(current_state)
+            next_state = self.redo_stack.pop()
+            self.text_widget.delete("1.0", tk.END)
+            self.text_widget.insert("1.0", next_state)
+            self.last_state = next_state
+            show_status("Redo")
+
+# Create undo manager after text_output creation
+undo_manager = UndoRedoManager(text_output)
+
+# Update generate function to use undo manager
+def on_generate():
+    undo_manager.save_state()
+    selected_poet = poet_var.get()
+    num_lines = int(lines_var.get())
+    selected_devices = [device for device, var in device_vars.items() if var.get()]
+
+    if selected_poet and num_lines > 0:
+        file_path = poet_files[selected_poet]
+        try:
+            transition_matrix = preprocess_text(file_path)
+            if not transition_matrix:
+                text_output.delete("1.0", tk.END)
+                text_output.insert(tk.INSERT, "Error: Could not generate poem from empty text file")
+                return
+                
+            start_word = random.choice(list(transition_matrix.keys()))
+            poem = generate_poem(start_word, num_lines, transition_matrix, selected_devices)
+            text_output.delete("1.0", tk.END)
+            text_output.insert(tk.INSERT, poem)
+        except Exception as e:
+            text_output.delete("1.0", tk.END)
+            text_output.insert(tk.INSERT, f"Error generating poem: {e}")
+
+# Add undo/redo functions
+def undo_action():
+    undo_manager.undo()
+
+def redo_action():
+    undo_manager.redo()
+
+def show_shortcuts():
+    """Display keyboard shortcuts help dialog"""
+    dialog = tk.Toplevel(root)
+    dialog.title("Keyboard Shortcuts")
+    dialog.geometry("400x300")
+    
+    # Apply current theme
+    dialog.configure(bg=xp_colors['bg'])
+    current_font = themes[theme_var.get()]['font']
+    
+    # Create scrollable text area
+    text = scrolledtext.ScrolledText(dialog, font=current_font, 
+                                   bg=xp_colors['text_bg'],
+                                   wrap=tk.WORD)
+    text.pack(fill="both", expand=True, padx=10, pady=10)
+    
+    # Add shortcuts
+    text.insert("1.0", "Keyboard Shortcuts:\n\n")
+    for shortcut, description in SHORTCUTS.items():
+        text.insert("end", f"{shortcut:<15} - {description}\n")
+    
+    text.configure(state="disabled")
+
+# Add help button to button frame
+help_button = tk.Button(button_frame, text="⌨ Shortcuts", 
+                       command=show_shortcuts,
+                       font=themes["Default (Cute)"]['font'],
+                       bg=xp_colors['button'],
+                       activebackground=xp_colors['highlight'])
+help_button.pack(side=tk.LEFT, padx=5)
+
+# Add keyboard shortcuts binding after all GUI elements are created
+root.bind_all('<Key>', handle_shortcut)
 
 # Start the main loop
 root.mainloop()
