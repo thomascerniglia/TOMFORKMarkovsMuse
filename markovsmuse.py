@@ -1,8 +1,11 @@
 import random
 import re
 import tkinter as tk
-from tkinter import ttk, scrolledtext, Menu
+from tkinter import ttk, scrolledtext, Menu, filedialog, messagebox
 from collections import defaultdict
+import json
+from datetime import datetime
+import os
 
 # Step 1: Data Collection - Dictionary containing available poets and their respective text files
 poet_files = {
@@ -74,6 +77,11 @@ themes = {
         'title_font': ("Old English Text MT", 14, "bold")
     }
 }
+
+# Add to your constants section
+SAVES_DIR = "saved_poems"
+if not os.path.exists(SAVES_DIR):
+    os.makedirs(SAVES_DIR)
 
 # Function to preprocess the text and build the Markov chain
 def preprocess_text(file_path, depth=2):
@@ -648,110 +656,165 @@ def change_theme(event=None):
                         elif isinstance(subchild, (tk.Checkbutton, tk.Radiobutton, tk.Label)):
                             subchild.configure(bg=xp_colors['frame_bg'], font=current_font)
     
-    # Update buttons
-    for button in [generate_button, copy_button]:
+    # Update the new button frame and buttons
+    button_frame.configure(bg=xp_colors['frame_bg'])
+    for button in [save_button, load_button, export_button]:
         button.configure(
             bg=xp_colors['button'],
             activebackground=xp_colors['highlight'],
             font=current_font
         )
+        if theme_name == "Dark Mode":
+            button.configure(fg='white')
+        else:
+            button.configure(fg='black')
+
+# Add these functions for save/load functionality
+def save_current_poem():
+    """Save the current poem with metadata"""
+    current_text = text_output.get("1.0", "end-1c").strip()
+    if not current_text:
+        messagebox.showwarning("No Poem", "There is no poem to save!")
+        return
+        
+    # Create poem data
+    poem_data = {
+        "text": current_text,
+        "poet": poet_var.get(),
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "theme": theme_var.get(),
+        "devices": [device for device, var in device_vars.items() if var.get()]
+    }
     
-    # Update text area
-    text_output.configure(
-        bg=xp_colors['text_bg'],
-        font=current_font
+    # Generate filename based on date
+    filename = f"poem_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    filepath = os.path.join(SAVES_DIR, filename)
+    
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(poem_data, f, indent=4)
+        messagebox.showinfo("Success", "Poem saved successfully!")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to save poem: {str(e)}")
+
+def load_saved_poem():
+    """Load a previously saved poem"""
+    files = [f for f in os.listdir(SAVES_DIR) if f.endswith('.json')]
+    if not files:
+        messagebox.showinfo("No Saves", "No saved poems found!")
+        return
+        
+    filepath = filedialog.askopenfilename(
+        initialdir=SAVES_DIR,
+        title="Select Poem",
+        filetypes=[("JSON files", "*.json")]
     )
     
-    # Handle dark mode specific changes
-    if theme_name == "Dark Mode":
-        text_output.configure(fg='white')
-        title_label.configure(fg='white')
-        generate_button.configure(fg='white')
-        copy_button.configure(fg='white')
+    if not filepath:
+        return
         
-        # Update combobox and spinbox styles for dark mode
-        style = ttk.Style()
-        style.configure('TCombobox', fieldbackground=xp_colors['text_bg'], foreground='white')
-        style.configure('TSpinbox', fieldbackground=xp_colors['text_bg'], foreground='white')
-        style.map('TCombobox', fieldbackground=[('readonly', xp_colors['text_bg'])])
-        style.map('TSpinbox', fieldbackground=[('readonly', xp_colors['text_bg'])])
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            poem_data = json.load(f)
+            
+        # Update UI with loaded poem
+        text_output.delete("1.0", tk.END)
+        text_output.insert("1.0", poem_data["text"])
         
-        # Force update comboboxes
-        theme_dropdown.configure(style='TCombobox')
-        poet_dropdown.configure(style='TCombobox')
-        lines_entry.configure(style='TSpinbox')
+        # Update metadata if possible
+        if poem_data["poet"] in poet_files:
+            poet_var.set(poem_data["poet"])
+        if poem_data["theme"] in themes:
+            theme_var.set(poem_data["theme"])
+            change_theme()
+            
+        # Show metadata in status
+        status = f"Loaded poem by {poem_data['poet']} ({poem_data['date']})"
+        messagebox.showinfo("Poem Loaded", status)
         
-        # Update all text in frames
-        for frame in content_frame.winfo_children():
-            if isinstance(frame, tk.LabelFrame):
-                frame.configure(fg='white')
-            for widget in frame.winfo_children():
-                if isinstance(widget, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
-                    widget.configure(fg='white')
-                if isinstance(widget, tk.Frame):
-                    for subwidget in widget.winfo_children():
-                        if isinstance(subwidget, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
-                            subwidget.configure(fg='white')
-    else:
-        text_output.configure(fg='black')
-        title_label.configure(fg='white')
-        generate_button.configure(fg='black')
-        copy_button.configure(fg='black')
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to load poem: {str(e)}")
+
+def export_poem():
+    """Export the current poem as a formatted text file"""
+    current_text = text_output.get("1.0", "end-1c").strip()
+    if not current_text:
+        messagebox.showwarning("No Poem", "There is no poem to export!")
+        return
         
-        # Reset combobox and spinbox styles
-        style = ttk.Style()
-        style.configure('TCombobox', fieldbackground=xp_colors['text_bg'], foreground='black')
-        style.configure('TSpinbox', fieldbackground=xp_colors['text_bg'], foreground='black')
-        style.map('TCombobox', fieldbackground=[('readonly', xp_colors['text_bg'])])
-        style.map('TSpinbox', fieldbackground=[('readonly', xp_colors['text_bg'])])
+    filepath = filedialog.asksaveasfilename(
+        initialdir=".",
+        title="Export Poem",
+        defaultextension=".txt",
+        filetypes=[("Text files", "*.txt")]
+    )
+    
+    if not filepath:
+        return
         
-        # Force update comboboxes
-        theme_dropdown.configure(style='TCombobox')
-        poet_dropdown.configure(style='TCombobox')
-        lines_entry.configure(style='TSpinbox')
-        
-        # Reset text colors
-        for frame in content_frame.winfo_children():
-            if isinstance(frame, tk.LabelFrame):
-                frame.configure(fg='black')
-            for widget in frame.winfo_children():
-                if isinstance(widget, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
-                    widget.configure(fg='black')
-                if isinstance(widget, tk.Frame):
-                    for subwidget in widget.winfo_children():
-                        if isinstance(subwidget, (tk.Label, tk.Checkbutton, tk.Radiobutton)):
-                            subwidget.configure(fg='black')
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            # Write header
+            f.write(f"Generated by Markov's Muse\n")
+            f.write(f"Poet: {poet_var.get()}\n")
+            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write("\n" + "="*40 + "\n\n")
+            # Write poem
+            f.write(current_text)
+            
+        messagebox.showinfo("Success", "Poem exported successfully!")
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to export poem: {str(e)}")
 
 # GUI Setup
 root = tk.Tk()
 root.title("🌸 Poem Generator 🌸")
 root.geometry("700x650")
+root.minsize(600, 500)  # Set minimum window size
+
+# Make the root window scalable
+root.grid_rowconfigure(0, weight=1)
+root.grid_columnconfigure(0, weight=1)
 
 # Apply Windows XP theme
 xp_colors = apply_xp_style()
 root.configure(bg=xp_colors['bg'])
 
+# Create main container that will scale
+main_container = tk.Frame(root, bg=xp_colors['bg'])
+main_container.grid(row=0, column=0, sticky="nsew")
+main_container.grid_columnconfigure(0, weight=1)
+main_container.grid_rowconfigure(1, weight=1)  # Make content frame expandable
+
 # Create title bar with XP style
-title_frame = tk.Frame(root, bg=xp_colors['title'], relief="raised", bd=1)
-title_frame.pack(fill="x", pady=(0, 10))
+title_frame = tk.Frame(main_container, bg=xp_colors['title'], relief="raised", bd=1)
+title_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
 title_label = tk.Label(title_frame, text="~ Markov's Muse - Poem Generator ~", 
-                      font=("Tahoma", 14, "bold"), bg=xp_colors['title'], fg="white", pady=5)
+                      font=themes["Default (Cute)"]['title_font'], 
+                      bg=xp_colors['title'], fg="white", pady=5)
 title_label.pack()
 
-# Create main content frame
-content_frame = tk.Frame(root, bg=xp_colors['bg'], relief="groove", bd=2)
-content_frame.pack(padx=10, pady=5, fill="both", expand=True)
+# Create scrollable content frame
+canvas = tk.Canvas(main_container, bg=xp_colors['bg'])
+canvas.grid(row=1, column=0, sticky="nsew")
 
-# Add theme frame
-theme_frame = tk.LabelFrame(content_frame, text="Theme", 
-                          font=("Tahoma", 11, "bold"), bg=xp_colors['frame_bg'])
-theme_frame.pack(padx=10, pady=5, fill="x")
+scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
+scrollbar.grid(row=1, column=1, sticky="ns")
 
-theme_var = tk.StringVar(value="Default (Cute)")
-theme_dropdown = ttk.Combobox(theme_frame, textvariable=theme_var, 
-                            values=list(themes.keys()), font=("Tahoma", 11))
-theme_dropdown.pack(pady=5, padx=10, fill="x")
-theme_dropdown.bind('<<ComboboxSelected>>', change_theme)
+canvas.configure(yscrollcommand=scrollbar.set)
+
+# Create content frame inside canvas
+content_frame = tk.Frame(canvas, bg=xp_colors['bg'], relief="groove", bd=2)
+canvas.create_window((0, 0), window=content_frame, anchor="nw", tags="content")
+content_frame.grid_columnconfigure(0, weight=1)
+
+# Function to update canvas scroll region
+def update_scrollregion(event):
+    canvas.configure(scrollregion=canvas.bbox("all"))
+    width = main_container.winfo_width() - scrollbar.winfo_width()
+    canvas.itemconfig("content", width=width)
+
+content_frame.bind("<Configure>", update_scrollregion)
 
 # Poet selection with XP styling
 poet_frame = tk.LabelFrame(content_frame, text="Select Poet", 
@@ -807,6 +870,37 @@ popup_menu.add_command(label="Copy", command=copy_text)
 # Bind events
 text_output.bind("<Button-3>", show_popup)  # Right click
 text_output.bind("<Control-c>", lambda e: copy_text())  # Ctrl+C shortcut
+
+# Add buttons to the UI (add after the copy button)
+button_frame = tk.Frame(content_frame, bg=xp_colors['frame_bg'])
+button_frame.pack(pady=5)
+
+save_button = tk.Button(button_frame, text="💾 Save Poem", 
+                       command=save_current_poem, 
+                       font=themes["Default (Cute)"]['font'],
+                       bg=xp_colors['button'], relief="raised",
+                       activebackground=xp_colors['highlight'])
+save_button.pack(side=tk.LEFT, padx=5)
+
+load_button = tk.Button(button_frame, text="📂 Load Poem", 
+                       command=load_saved_poem, 
+                       font=themes["Default (Cute)"]['font'],
+                       bg=xp_colors['button'], relief="raised",
+                       activebackground=xp_colors['highlight'])
+load_button.pack(side=tk.LEFT, padx=5)
+
+export_button = tk.Button(button_frame, text="📤 Export", 
+                         command=export_poem, 
+                         font=themes["Default (Cute)"]['font'],
+                         bg=xp_colors['button'], relief="raised",
+                         activebackground=xp_colors['highlight'])
+export_button.pack(side=tk.LEFT, padx=5)
+
+# Add mouse wheel scrolling
+def on_mousewheel(event):
+    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+canvas.bind_all("<MouseWheel>", on_mousewheel)
 
 # Start the main loop
 root.mainloop()
