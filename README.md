@@ -1,4 +1,7 @@
-MAKE CUTE BUTTONS
+This is my fork of the vastly more talented jens poem generator
+
+
+MAKE CUTE BUTTONS NEXT
 
 
 
