@@ -6,6 +6,7 @@ from collections import defaultdict
 import json
 from datetime import datetime
 import os
+from pathlib import Path
 
 # Step 1: Data Collection - Dictionary containing available poets and their respective text files
 poet_files = {
@@ -78,10 +79,23 @@ themes = {
     }
 }
 
-# Add to your constants section
-SAVES_DIR = "saved_poems"
-if not os.path.exists(SAVES_DIR):
-    os.makedirs(SAVES_DIR)
+# Update the saves directory to use user's documents folder
+def get_save_directory():
+    """Get or create the save directory in user's documents folder"""
+    if os.name == 'nt':  # Windows
+        docs_path = os.path.join(os.path.expanduser('~'), 'Documents')
+    else:  # macOS and Linux
+        docs_path = os.path.join(os.path.expanduser('~'), 'Documents')
+    
+    save_path = os.path.join(docs_path, 'MarkovsMuse', 'saved_poems')
+    
+    # Create directory if it doesn't exist
+    Path(save_path).mkdir(parents=True, exist_ok=True)
+    
+    return save_path
+
+# Replace the SAVES_DIR constant with this
+SAVES_DIR = get_save_directory()
 
 # Function to preprocess the text and build the Markov chain
 def preprocess_text(file_path, depth=2):
@@ -693,7 +707,7 @@ def save_current_poem():
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(poem_data, f, indent=4)
-        messagebox.showinfo("Success", "Poem saved successfully!")
+        messagebox.showinfo("Success", f"Poem saved to:\n{filepath}")
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save poem: {str(e)}")
 
@@ -815,6 +829,19 @@ def update_scrollregion(event):
     canvas.itemconfig("content", width=width)
 
 content_frame.bind("<Configure>", update_scrollregion)
+
+# Add theme frame
+theme_frame = tk.LabelFrame(content_frame, text="Theme", 
+                          font=themes["Default (Cute)"]['font'], 
+                          bg=xp_colors['frame_bg'])
+theme_frame.pack(padx=10, pady=5, fill="x")
+
+theme_var = tk.StringVar(value="Default (Cute)")
+theme_dropdown = ttk.Combobox(theme_frame, textvariable=theme_var, 
+                            values=list(themes.keys()), 
+                            font=themes["Default (Cute)"]['font'])
+theme_dropdown.pack(pady=5, padx=10, fill="x")
+theme_dropdown.bind('<<ComboboxSelected>>', change_theme)
 
 # Poet selection with XP styling
 poet_frame = tk.LabelFrame(content_frame, text="Select Poet", 
