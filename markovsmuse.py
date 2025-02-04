@@ -8,6 +8,321 @@ from datetime import datetime
 import os
 from pathlib import Path
 
+# After imports and before poet_files dictionary
+class PoemBrowser(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("📚 Poem Browser")
+        self.geometry("900x600")
+        self.minsize(800, 400)
+        
+        # Configure grid weights for main window
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        
+        # Apply current theme
+        self.configure(bg=xp_colors['bg'])
+        current_font = themes[theme_var.get()]['font']
+        
+        # Create top control frame
+        control_frame = tk.Frame(self, bg=xp_colors['frame_bg'], relief="groove", bd=2)
+        control_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=5)
+        control_frame.grid_columnconfigure(1, weight=1)  # Make search frame expand
+        
+        # Add sort options
+        sort_frame = tk.Frame(control_frame, bg=xp_colors['frame_bg'])
+        sort_frame.grid(row=0, column=0, padx=10)
+        
+        tk.Label(sort_frame, text="Sort by:", font=current_font, 
+                bg=xp_colors['frame_bg']).pack(side=tk.LEFT)
+        
+        self.sort_var = tk.StringVar(value="Date (Newest)")
+        sort_options = ["Date (Newest)", "Date (Oldest)", "Poet A-Z", "Poet Z-A", "Favorites First"]
+        sort_menu = ttk.Combobox(sort_frame, textvariable=self.sort_var, 
+                                values=sort_options, font=current_font, width=15)
+        sort_menu.pack(side=tk.LEFT, padx=5)
+        sort_menu.bind('<<ComboboxSelected>>', lambda e: self.load_poem_list())
+        
+        # Add search (expandable)
+        search_frame = tk.Frame(control_frame, bg=xp_colors['frame_bg'])
+        search_frame.grid(row=0, column=1, sticky="ew", padx=10)
+        search_frame.grid_columnconfigure(1, weight=1)  # Make entry expand
+        
+        tk.Label(search_frame, text="Search:", font=current_font, 
+                bg=xp_colors['frame_bg']).grid(row=0, column=0, padx=(0,5))
+        
+        self.search_var = tk.StringVar()
+        self.search_var.trace('w', self.filter_poems)
+        search_entry = tk.Entry(search_frame, textvariable=self.search_var, 
+                              font=current_font)
+        search_entry.grid(row=0, column=1, sticky="ew")
+        
+        # Create main content frame
+        content_frame = tk.Frame(self, bg=xp_colors['bg'])
+        content_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+        content_frame.grid_columnconfigure(1, weight=1)  # Make preview expand
+        content_frame.grid_rowconfigure(0, weight=1)    # Make content expand vertically
+        
+        # Create poem list with scrollbar
+        list_frame = tk.Frame(content_frame, bg=xp_colors['frame_bg'], relief="sunken", bd=1)
+        list_frame.grid(row=0, column=0, sticky="ns", padx=(0,5))
+        
+        self.poem_list = tk.Listbox(list_frame, font=current_font, 
+                                  bg=xp_colors['text_bg'],
+                                  selectmode=tk.SINGLE,
+                                  exportselection=False,
+                                  width=45)
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", 
+                                command=self.poem_list.yview)
+        self.poem_list.configure(yscrollcommand=scrollbar.set)
+        
+        self.poem_list.pack(side=tk.LEFT, fill="both")
+        scrollbar.pack(side=tk.RIGHT, fill="y")
+        
+        self.poem_list.bind('<<ListboxSelect>>', self.show_selected_poem)
+        
+        # Create preview frame
+        preview_frame = tk.Frame(content_frame, bg=xp_colors['frame_bg'], relief="sunken", bd=1)
+        preview_frame.grid(row=0, column=1, sticky="nsew")
+        preview_frame.grid_rowconfigure(1, weight=1)    # Make text area expand
+        preview_frame.grid_columnconfigure(0, weight=1) # Make preview expand horizontally
+        
+        # Preview header
+        self.preview_header = tk.Label(preview_frame, text="", font=current_font,
+                                     bg=xp_colors['frame_bg'], anchor="w")
+        self.preview_header.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        
+        # Preview text
+        self.preview_text = scrolledtext.ScrolledText(preview_frame, 
+                                                    font=current_font,
+                                                    bg=xp_colors['text_bg'],
+                                                    wrap=tk.WORD)
+        self.preview_text.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        
+        # Button frame
+        button_frame = tk.Frame(preview_frame, bg=xp_colors['frame_bg'])
+        button_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
+        
+        # Action buttons
+        buttons = [
+            ("📝 Load", self.load_selected),
+            ("🗑️ Delete", self.delete_selected),
+            ("⭐ Favorite", self.toggle_favorite),
+            ("📤 Export", self.export_selected)
+        ]
+        
+        for i, (text, command) in enumerate(buttons):
+            button_frame.grid_columnconfigure(i, weight=1)  # Make buttons expand equally
+            tk.Button(button_frame, text=text, command=command,
+                     font=current_font, bg=xp_colors['button'],
+                     activebackground=xp_colors['highlight']).grid(row=0, column=i, padx=2, sticky="ew")
+        
+        # Load poems
+        self.load_poem_list()
+    
+    def load_poem_list(self):
+        """Load and display the list of saved poems"""
+        self.poem_list.delete(0, tk.END)
+        try:
+            files = list(Path(SAVES_DIR).glob('*.json'))
+            poems = []
+            
+            for file in files:
+                with open(file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    # Add favorite status if not present
+                    if 'favorite' not in data:
+                        data['favorite'] = False
+                    # Add file path for later use
+                    data['file_path'] = file
+                    poems.append(data)
+            
+            # Sort based on selected option
+            sort_option = self.sort_var.get()
+            if sort_option == "Date (Newest)":
+                poems.sort(key=lambda x: x['date'], reverse=True)
+            elif sort_option == "Date (Oldest)":
+                poems.sort(key=lambda x: x['date'])
+            elif sort_option == "Poet A-Z":
+                poems.sort(key=lambda x: x['poet'])
+            elif sort_option == "Poet Z-A":
+                poems.sort(key=lambda x: x['poet'], reverse=True)
+            elif sort_option == "Favorites First":
+                poems.sort(key=lambda x: (not x['favorite'], x['date']), reverse=True)
+            
+            for data in poems:
+                date = datetime.strptime(data['date'], "%Y-%m-%d %H:%M:%S")
+                star = "⭐ " if data['favorite'] else "   "
+                display_text = f"{star}{date.strftime('%Y-%m-%d %H:%M')} │ {data['poet']}"
+                self.poem_list.insert(tk.END, display_text)
+                self.poem_list.itemconfig(tk.END, {'bg': xp_colors['text_bg']})
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load poems: {str(e)}")
+    
+    def show_selected_poem(self, event=None):
+        """Display the selected poem's content"""
+        selection = self.poem_list.curselection()
+        if not selection:
+            return
+            
+        try:
+            files = sorted(Path(SAVES_DIR).glob('*.json'), key=os.path.getmtime, reverse=True)
+            file = files[selection[0]]
+            with open(file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            # Update header with more metadata
+            header = f"Poet: {data['poet']}\n"
+            header += f"Date: {data['date']}\n"
+            if 'devices' in data:
+                header += f"Devices: {', '.join(data['devices'])}\n"
+            if 'favorite' in data:
+                header += f"Favorite: {'Yes' if data['favorite'] else 'No'}\n"
+            if 'theme' in data:
+                header += f"Theme: {data['theme']}\n"
+            
+            self.preview_header.config(text=header)
+            
+            # Update preview
+            self.preview_text.delete('1.0', tk.END)
+            self.preview_text.insert('1.0', data['text'])
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load poem: {str(e)}")
+    
+    def filter_poems(self, *args):
+        """Filter poems based on search text"""
+        search_text = self.search_var.get().lower()
+        self.poem_list.delete(0, tk.END)
+        
+        try:
+            files = sorted(Path(SAVES_DIR).glob('*.json'), key=os.path.getmtime, reverse=True)
+            for file in files:
+                with open(file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    date = datetime.strptime(data['date'], "%Y-%m-%d %H:%M:%S")
+                    display_text = f"{date.strftime('%Y-%m-%d %H:%M')} │ {data['poet']}"
+                    if (search_text in display_text.lower() or 
+                        search_text in data['text'].lower()):
+                        self.poem_list.insert(tk.END, display_text)
+                        self.poem_list.itemconfig(tk.END, {'bg': xp_colors['text_bg']})
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to filter poems: {str(e)}")
+    
+    def load_selected(self):
+        """Load the selected poem into the main window"""
+        selection = self.poem_list.curselection()
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a poem to load!")
+            return
+            
+        try:
+            files = sorted(Path(SAVES_DIR).glob('*.json'), key=os.path.getmtime, reverse=True)
+            file = files[selection[0]]
+            with open(file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            # Update main window
+            text_output.delete("1.0", tk.END)
+            text_output.insert("1.0", data["text"])
+            
+            # Update metadata if possible
+            if data["poet"] in poet_files:
+                poet_var.set(data["poet"])
+            if data["theme"] in themes:
+                theme_var.set(data["theme"])
+                change_theme()
+                
+            self.destroy()  # Close browser window
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load poem: {str(e)}")
+    
+    def delete_selected(self):
+        """Delete the selected poem"""
+        selection = self.poem_list.curselection()
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a poem to delete!")
+            return
+            
+        if not messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this poem?"):
+            return
+            
+        try:
+            files = sorted(Path(SAVES_DIR).glob('*.json'), key=os.path.getmtime, reverse=True)
+            file = files[selection[0]]
+            os.remove(file)
+            self.load_poem_list()  # Refresh the list
+            self.preview_header.config(text="")
+            self.preview_text.delete('1.0', tk.END)
+            messagebox.showinfo("Success", "Poem deleted successfully!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to delete poem: {str(e)}")
+    
+    def toggle_favorite(self):
+        """Toggle favorite status of the selected poem"""
+        selection = self.poem_list.curselection()
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a poem to favorite!")
+            return
+            
+        try:
+            files = sorted(Path(SAVES_DIR).glob('*.json'), key=os.path.getmtime, reverse=True)
+            file = files[selection[0]]
+            
+            with open(file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Toggle favorite status
+            data['favorite'] = not data.get('favorite', False)
+            
+            with open(file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4)
+            
+            # Refresh the list to show updated status
+            self.load_poem_list()
+            
+            status = "added to" if data['favorite'] else "removed from"
+            messagebox.showinfo("Success", f"Poem {status} favorites!")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to update favorite status: {str(e)}")
+    
+    def export_selected(self):
+        """Export the selected poem"""
+        selection = self.poem_list.curselection()
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a poem to export!")
+            return
+            
+        try:
+            files = sorted(Path(SAVES_DIR).glob('*.json'), key=os.path.getmtime, reverse=True)
+            file = files[selection[0]]
+            with open(file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            filepath = filedialog.asksaveasfilename(
+                initialdir=".",
+                title="Export Poem",
+                defaultextension=".txt",
+                filetypes=[("Text files", "*.txt")]
+            )
+            
+            if filepath:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(f"Generated by Markov's Muse\n")
+                    f.write(f"Poet: {data['poet']}\n")
+                    f.write(f"Date: {data['date']}\n")
+                    if 'devices' in data:
+                        f.write(f"Devices: {', '.join(data['devices'])}\n")
+                    f.write("\n" + "="*40 + "\n\n")
+                    f.write(data['text'])
+                    
+                messagebox.showinfo("Success", "Poem exported successfully!")
+                
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to export poem: {str(e)}")
+
 # Step 1: Data Collection - Dictionary containing available poets and their respective text files
 poet_files = {
     "Emily Dickinson": "dickinson.txt",  # Replace with actual file paths
@@ -697,7 +1012,8 @@ def save_current_poem():
         "poet": poet_var.get(),
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "theme": theme_var.get(),
-        "devices": [device for device, var in device_vars.items() if var.get()]
+        "devices": [device for device, var in device_vars.items() if var.get()],
+        "favorite": False  # Initialize as not favorite
     }
     
     # Generate filename based on date
@@ -922,6 +1238,14 @@ export_button = tk.Button(button_frame, text="📤 Export",
                          bg=xp_colors['button'], relief="raised",
                          activebackground=xp_colors['highlight'])
 export_button.pack(side=tk.LEFT, padx=5)
+
+# Add to the button frame creation
+browse_button = tk.Button(button_frame, text="📚 Browse Poems", 
+                         command=lambda: PoemBrowser(root),
+                         font=themes["Default (Cute)"]['font'],
+                         bg=xp_colors['button'], relief="raised",
+                         activebackground=xp_colors['highlight'])
+browse_button.pack(side=tk.LEFT, padx=5)
 
 # Add mouse wheel scrolling
 def on_mousewheel(event):
