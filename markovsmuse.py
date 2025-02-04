@@ -36,7 +36,9 @@ themes = {
         'border': '#C8A4D4',       # Darker lavender border
         'title': '#B088C9',        # Deep lavender title
         'text_bg': '#FDF4FF',      # Almost white lavender text background
-        'frame_bg': '#F4E6FF'      # Light lavender frame background
+        'frame_bg': '#F4E6FF',     # Light lavender frame background
+        'font': ("Comic Sans MS", 11),  # Playful font
+        'title_font': ("Comic Sans MS", 14, "bold")
     },
     "Vaporwave": {
         'bg': '#FF6AD5',           # Hot pink
@@ -45,7 +47,9 @@ themes = {
         'border': '#94D0FF',       # Light blue
         'title': '#FF8DC7',        # Pink
         'text_bg': '#FFCEF3',      # Light pink
-        'frame_bg': '#CAADFF'      # Soft purple
+        'frame_bg': '#CAADFF',     # Soft purple
+        'font': ("VT323", 12),     # Retro digital font (fallback: "Courier")
+        'title_font': ("VT323", 16, "bold")
     },
     "Dark Mode": {
         'bg': '#1A1A1A',           # Almost black
@@ -54,7 +58,9 @@ themes = {
         'border': '#2A2A2A',       # Darker gray
         'title': '#8A2BE2',        # Bright purple
         'text_bg': '#2D2D2D',      # Dark gray
-        'frame_bg': '#242424'      # Very dark gray
+        'frame_bg': '#242424',     # Very dark gray
+        'font': ("Consolas", 11),  # Modern monospace
+        'title_font': ("Consolas", 14, "bold")
     },
     "Medieval": {
         'bg': '#8B4513',           # Saddle brown
@@ -63,7 +69,9 @@ themes = {
         'border': '#8B7355',       # Dark goldenrod
         'title': '#800000',        # Maroon
         'text_bg': '#F5DEB3',      # Wheat
-        'frame_bg': '#D2B48C'      # Tan
+        'frame_bg': '#D2B48C',     # Tan
+        'font': ("Old English Text MT", 11),  # Medieval font (fallback: "Times New Roman")
+        'title_font': ("Old English Text MT", 14, "bold")
     }
 }
 
@@ -581,56 +589,80 @@ def change_theme(event=None):
     global xp_colors
     theme_name = theme_var.get()
     xp_colors = apply_xp_style(theme_name)
+    current_font = themes[theme_name]['font']
+    title_font = themes[theme_name]['title_font']
     
-    # Update all existing widgets with new colors
+    # Update all existing widgets with new colors and fonts
     root.configure(bg=xp_colors['bg'])
+    
+    # Update title
     title_frame.configure(bg=xp_colors['title'])
-    title_label.configure(bg=xp_colors['title'])
+    title_label.configure(bg=xp_colors['title'], font=title_font)
+    
+    # Update all frames and their contents
     content_frame.configure(bg=xp_colors['bg'])
     
     # Update all frames and their children
     for frame in [poet_frame, lines_frame, theme_frame]:
         frame.configure(bg=xp_colors['frame_bg'])
+        # Update frame label font
+        if isinstance(frame, tk.LabelFrame):
+            frame.configure(font=current_font)
+        # Update all widgets in the frame
+        for widget in frame.winfo_children():
+            if isinstance(widget, (tk.Label, tk.Button)):
+                widget.configure(font=current_font)
+            elif isinstance(widget, ttk.Combobox):
+                widget.configure(font=current_font)
+            elif isinstance(widget, ttk.Spinbox):
+                widget.configure(font=current_font)
     
     # Update poetic devices frame and its widgets
     for widget in content_frame.winfo_children():
         if isinstance(widget, tk.Frame):
             widget.configure(bg=xp_colors['frame_bg'])
+            if isinstance(widget, tk.LabelFrame):
+                widget.configure(font=current_font)
             
             # First level - main frames
             for child in widget.winfo_children():
                 if isinstance(child, (tk.Checkbutton, tk.Radiobutton, tk.Label)):
-                    child.configure(bg=xp_colors['frame_bg'])
+                    child.configure(bg=xp_colors['frame_bg'], font=current_font)
                 
                 # Second level - rhyme frame
                 if isinstance(child, tk.Frame):
                     child.configure(bg=xp_colors['frame_bg'])
                     
-                    # Third level - scheme frame (where AABB, etc. are)
+                    # Third level - scheme frame
                     for subchild in child.winfo_children():
                         if isinstance(subchild, tk.Frame):
-                            # This is the scheme frame
                             subchild.configure(bg=xp_colors['frame_bg'])
-                            # Update all radio buttons inside scheme frame
                             for radio in subchild.winfo_children():
                                 if isinstance(radio, tk.Radiobutton):
                                     radio.configure(
                                         bg=xp_colors['frame_bg'],
                                         activebackground=xp_colors['frame_bg'],
-                                        selectcolor=xp_colors['frame_bg']
+                                        selectcolor=xp_colors['frame_bg'],
+                                        font=current_font
                                     )
                         elif isinstance(subchild, (tk.Checkbutton, tk.Radiobutton, tk.Label)):
-                            subchild.configure(bg=xp_colors['frame_bg'])
+                            subchild.configure(bg=xp_colors['frame_bg'], font=current_font)
     
     # Update buttons
     for button in [generate_button, copy_button]:
-        button.configure(bg=xp_colors['button'],
-                       activebackground=xp_colors['highlight'])
+        button.configure(
+            bg=xp_colors['button'],
+            activebackground=xp_colors['highlight'],
+            font=current_font
+        )
     
-    # Update text area and text colors
-    text_output.configure(bg=xp_colors['text_bg'])
+    # Update text area
+    text_output.configure(
+        bg=xp_colors['text_bg'],
+        font=current_font
+    )
     
-    # If using dark mode, adjust all text colors
+    # Handle dark mode specific changes
     if theme_name == "Dark Mode":
         text_output.configure(fg='white')
         title_label.configure(fg='white')
