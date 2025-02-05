@@ -986,13 +986,13 @@ def change_theme(event=None):
     # Update all existing widgets with new colors and fonts
     root.configure(bg=xp_colors['bg'])
     
-    # Update title
-    title_frame.configure(bg=xp_colors['title'])
-    title_label.configure(
-        bg=xp_colors['title'],
-        font=title_font,
-        fg='white' if theme_name == "Dark Mode" else 'black'
-    )
+    # Update title bar for dark mode
+    if theme_name == "Dark Mode":
+        title_frame.configure(bg='black')
+        title_label.configure(bg='black', fg='white', font=title_font)
+    else:
+        title_frame.configure(bg=xp_colors['title'])
+        title_label.configure(bg=xp_colors['title'], fg='white', font=title_font)
     
     # Update all frames and their contents
     content_frame.configure(bg=xp_colors['bg'])
